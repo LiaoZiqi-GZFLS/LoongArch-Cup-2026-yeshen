@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module YDecoder(
     input yc, yb, ya, //c -> i+1; b -> i; a -> i-1
     output negx, x, neg2x, _2x

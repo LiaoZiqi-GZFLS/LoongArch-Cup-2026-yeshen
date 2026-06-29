@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module perf_counter (
     input      clk              ,
     input      reset            ,

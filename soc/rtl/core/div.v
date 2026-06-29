@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 //x/y   //执行需要34个周期
 module div(
     input div_clk, reset,

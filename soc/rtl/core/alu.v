@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module alu(
   input  [13:0] alu_op,
   input  [31:0] alu_src1,

@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module core_top
 #(
 	parameter TLBNUM = 32

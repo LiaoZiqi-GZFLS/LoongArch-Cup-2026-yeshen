@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module regfile(
     input         clk,
     // READ PORT 1

@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 `include "csr.h"
 
 module addr_trans

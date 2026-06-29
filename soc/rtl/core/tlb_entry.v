@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module tlb_entry
 #(
     parameter TLBNUM = 32

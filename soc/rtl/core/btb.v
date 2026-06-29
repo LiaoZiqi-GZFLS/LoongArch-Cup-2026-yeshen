@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module btb
 #(
     parameter BTBNUM = 32,

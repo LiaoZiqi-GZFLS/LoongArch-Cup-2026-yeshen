@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 `include "mycpu.h"
 `include "csr.h"
 
