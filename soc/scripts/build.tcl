@@ -5,7 +5,7 @@
 #   vivado -mode batch -source soc/scripts/build.tcl -tclargs synth   ;# also synthesize
 #
 # Design choices baked in here (see soc/NOTICE and CLAUDE.md):
-#   * Synthesis top      = soc_top
+#   * Synthesis top      = fpga_top (board top: soc_top + physical 7-seg driver)
 #   * Cache SRAM         = behavioral reg-array models in dcache.v, guarded by
 #                          `ifdef SIMU. These are standard BRAM-inference
 #                          templates, so SIMU stays DEFINED for synthesis and
@@ -41,9 +41,12 @@ add_files -norecurse -fileset sources_1 $rtl
 # Verilog headers (`include "mycpu.h" / "csr.h"); Vivado classifies .h as headers.
 add_files -norecurse -fileset sources_1 [glob -nocomplain $soc/rtl/core/*.h]
 
-# `include search path + synthesis top
+# `include search path + synthesis top.
+# update_compile_order first so Vivado's lazy hierarchy/auto-top pass runs now;
+# otherwise it fires on the next query and overrides our set_property top.
 set_property include_dirs [list "$soc/rtl/core"] [get_filesets sources_1]
-set_property top soc_top [get_filesets sources_1]
+update_compile_order -fileset sources_1
+set_property top fpga_top [get_filesets sources_1]
 
 # Optional: preinitialize the data BRAM with the demo program for a runnable
 # bitstream. Left empty for a clean synthesizability check; uncomment for board.
@@ -51,7 +54,7 @@ set_property top soc_top [get_filesets sources_1]
 # add_files -norecurse -fileset sources_1 $soc/sw/demo.mem
 
 # ---- constraints ----
-add_files -norecurse -fileset constrs_1 "$soc/constr/soc_top.xdc"
+add_files -norecurse -fileset constrs_1 "$soc/constr/fpga_top.xdc"
 
 puts "==== sources_1 ===="
 foreach f [get_files -of_objects [get_filesets sources_1]] { puts "  $f" }
