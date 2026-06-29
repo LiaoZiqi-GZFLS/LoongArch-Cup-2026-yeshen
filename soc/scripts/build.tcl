@@ -50,10 +50,20 @@ set_property include_dirs [list "$soc/rtl/core"] [get_filesets sources_1]
 update_compile_order -fileset sources_1
 set_property top fpga_top [get_filesets sources_1]
 
-# Optional: preinitialize the data BRAM with the demo program for a runnable
-# bitstream. Left empty for a clean synthesizability check; uncomment for board.
-# set_property generic "INIT_FILE=$soc/sw/demo.mem" [get_filesets sources_1]
-# add_files -norecurse -fileset sources_1 $soc/sw/demo.mem
+# Preinitialize the unified BRAM with the demo program so the bitstream boots a
+# real LA32R program (sum 1..10 -> seg7, then cycle-count -> seg7, then halt).
+# The .mem is a $readmemh image (one 32-bit word/line); word 0 maps to the reset
+# PC 0x1c000000. Absolute (forward-slash) path so $readmemh resolves regardless
+# of the synth run directory; the file is also added to the project for visibility.
+# To synthesize a BLANK BRAM instead, set: set demo_mem ""
+set demo_mem [file normalize "$soc/sw/demo.mem"]
+if {$demo_mem ne "" && [file exists $demo_mem]} {
+    add_files -norecurse -fileset sources_1 $demo_mem
+    set_property generic "INIT_FILE=\"$demo_mem\"" [get_filesets sources_1]
+    puts "INIT_FILE   = $demo_mem"
+} else {
+    puts "INIT_FILE   = (none — blank BRAM)"
+}
 
 # ---- constraints ----
 add_files -norecurse -fileset constrs_1 "$soc/constr/fpga_top.xdc"

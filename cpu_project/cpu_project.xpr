@@ -295,10 +295,17 @@
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
+      <File Path="$PPRDIR/../soc/sw/demo.mem">
+        <FileInfo>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
       <Config>
         <Option Name="DesignMode" Val="RTL"/>
         <Option Name="TopModule" Val="fpga_top"/>
         <Option Name="VerilogDir" Val="$PPRDIR/../soc/rtl/core"/>
+        <Generic Name="INIT_FILE" Val="&quot;E:/code/Vivado/LoongArch-Cup-2026-yeshen/soc/sw/demo.mem&quot;"/>
       </Config>
     </FileSet>
     <FileSet Name="constrs_1" Type="Constrs" RelSrcDir="$PSRCDIR/constrs_1" RelGenDir="$PGENDIR/constrs_1">
