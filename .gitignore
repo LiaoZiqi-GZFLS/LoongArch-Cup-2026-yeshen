@@ -1,0 +1,20 @@
+# Vivado project: regenerated from RTL + soc/scripts/build.tcl, so the
+# tool-managed project tree is not tracked. Keep only the .xpr skeleton.
+cpu_project/*
+!cpu_project/cpu_project.xpr
+
+# Vivado / Xilinx tool noise (anywhere)
+*.jou
+*.log
+*.str
+.Xil/
+vivado*.backup.*
+**/*.cache/
+**/*.hw/
+**/*.sim/
+**/*.runs/
+**/*.gen/
+**/*.ip_user_files/
+
+# downloaded reference artifacts
+*.zip

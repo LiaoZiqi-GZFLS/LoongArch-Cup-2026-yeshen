@@ -29,7 +29,9 @@
     `define MS_TO_DS_FORWARD_BUS 39
 `endif
 
-// `SIMU` selects behavioral SRAM models for simulation. It MUST be undefined
-// (comment out the line below) before FPGA synthesis, so the Xilinx SRAM IP is
-// bound instead. The sim flow also passes -d SIMU on the command line.
+// `SIMU` selects the behavioral reg-array SRAM models defined in dcache.v.
+// In THIS SoC they are kept DEFINED for synthesis too: they are standard
+// BRAM-inference templates, so Vivado infers on-chip Block RAM and no Xilinx
+// SRAM IP (open-la500 IP/*.xcix) is required. The sim flow also passes -d SIMU.
+// (To use the Xilinx SRAM IP instead, comment this out and add the .xcix cores.)
 `define SIMU
