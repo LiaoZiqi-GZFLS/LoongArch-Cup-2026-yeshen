@@ -1,0 +1,9 @@
+soc/build/
+*.vvp
+*.vcd
+*.wdb
+xsim.dir/
+*.jou
+*.log
+*.pb
+.Xil/
