@@ -1,8 +1,10 @@
-# build.tcl — populate cpu_project with the SoC RTL and optionally run synthesis.
+# build.tcl — populate cpu_project with the SoC RTL and optionally build it.
 #
 # Usage (launch dir does NOT matter — paths are anchored to this script):
 #   vivado -mode batch -source soc/scripts/build.tcl              ;# add sources only
-#   vivado -mode batch -source soc/scripts/build.tcl -tclargs synth   ;# also synthesize
+#   vivado -mode batch -source soc/scripts/build.tcl -tclargs synth   ;# + synthesize
+#   vivado -mode batch -source soc/scripts/build.tcl -tclargs bit     ;# + impl + bitstream
+# (the "bit" path implies synthesis; it reuses an up-to-date synth run if present.)
 #
 # Design choices baked in here (see soc/NOTICE and CLAUDE.md):
 #   * Synthesis top      = fpga_top (board top: soc_top + physical 7-seg driver)
@@ -62,7 +64,7 @@ puts "top        = [get_property top [get_filesets sources_1]]"
 puts "include    = [get_property include_dirs [get_filesets sources_1]]"
 
 # ---- optional synthesis ----
-if {[lsearch $argv "synth"] >= 0} {
+if {[lsearch $argv "synth"] >= 0 || [lsearch $argv "bit"] >= 0} {
     reset_run synth_1
     launch_runs synth_1 -jobs 4
     wait_on_run synth_1
@@ -79,5 +81,32 @@ if {[lsearch $argv "synth"] >= 0} {
     puts "==== timing summary ===="
     report_timing_summary -max_paths 1 -delay_type max
     puts "SYNTH OK"
+}
+
+# ---- optional implementation + bitstream ----
+if {[lsearch $argv "bit"] >= 0} {
+    reset_run impl_1
+    launch_runs impl_1 -to_step write_bitstream -jobs 4
+    wait_on_run impl_1
+    set prog [get_property PROGRESS [get_runs impl_1]]
+    set stat [get_property STATUS   [get_runs impl_1]]
+    puts "==== impl_1: progress=$prog status=$stat ===="
+    if {$prog != "100%"} {
+        puts "ERROR: implementation/bitstream did not complete"
+        exit 1
+    }
+    open_run impl_1
+    puts "==== post-route timing summary ===="
+    report_timing_summary -max_paths 1 -delay_type max
+    set wns [get_property STATS.WNS [get_runs impl_1]]
+    set ths [get_property STATS.WHS [get_runs impl_1]]
+    puts "==== WNS=$wns  WHS=$ths ===="
+    set bit [glob -nocomplain "$repo/cpu_project/cpu_project.runs/impl_1/*.bit"]
+    puts "==== bitstream: $bit ===="
+    if {[llength $bit] == 0} {
+        puts "ERROR: no .bit produced"
+        exit 1
+    }
+    puts "BITSTREAM OK"
 }
 puts "BUILD DONE"
