@@ -1,0 +1,26 @@
+THIRD-PARTY ATTRIBUTION
+=======================
+
+The CPU core under `soc/rtl/core/` is derived from the third-party
+open-source processor:
+
+    openLA500 (齐物) — a LoongArch32-Reduced (LA32R) single-issue
+    5-stage pipeline core.
+    Original source: ../open-la500-master/  (kept pristine in this repo)
+
+Local modifications made for this 2026 龙芯杯 (LoongArch Cup) SoC demo are
+limited to:
+  1. id_stage.v — the five TLB privileged instructions
+     (invtlb / tlbsrch / tlbrd / tlbwr / tlbfill) are hardwired to 1'b0
+     so the MMU privileged subset is not implemented (contest constraint:
+     no TLB/MMU privileged instructions). `ertn` is preserved.
+  2. All core files — a `timescale 1ns/1ps directive was added at the top
+     for Vivado xsim timescale consistency. No logic was changed.
+
+All other RTL under `soc/rtl/soc/`, `soc/rtl/periph/`, the testbenches
+under `soc/sim/`, and the demo software under `soc/sw/` are original work
+for this project.
+
+This attribution satisfies the contest's academic-integrity requirement
+(see Description.md) that all third-party code/IP be cited. The design
+report MUST also cite openLA500.
