@@ -723,7 +723,7 @@ def lu12i_w(rd, si20):   return (0x14000000 | (_u(si20,20)<<5) | _u(rd,5)) & M32
 # bne rj,rd,offs (branch if rj!=rd); offs in bytes, encoded >>2 as 16-bit
 def bne(rj, rd, off):
     o = _u(off >> 2, 16)
-    return (0x44000000 | (o<<10) | (_u(rj,5)<<5) | _u(rd,5)) & M32
+    return (0x5c000000 | (o<<10) | (_u(rj,5)<<5) | _u(rd,5)) & M32
 # b offs (offs in bytes, 26-bit)
 def b(off):
     o = _u(off >> 2, 26)
