@@ -1,6 +1,8 @@
 `timescale 1ns/1ps
 // AXI3 slave: 32KB word BRAM @0x1c000000 + MMIO (seg7 write @0x1fb00000, counter read @0x1fb00010).
-// Supports INCR bursts (len=0 single / len=3 cache-line). Single master (the CPU core).
+// Supports INCR bursts (len=0 single / len=3 cache-line). Single master (the CPU core),
+// so the AXI3 lock/cache/prot sidebands and wid are intentionally not implemented (a single
+// master cannot have outstanding writes under different IDs, so wid-vs-awid ordering is moot).
 module axi_mem_soc #(
     parameter INIT_FILE = "",
     parameter RAM_BASE  = 32'h1c00_0000,

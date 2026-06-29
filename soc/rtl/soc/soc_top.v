@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
 // Minimal SoC top: openLA500 core (AXI3 master, DA mode) + AXI BRAM/MMIO slave + counter + seg7.
+// The CPU core (core_top, soc/rtl/core/) is derived from the third-party openLA500 (齐物)
+// LA32R core — see soc/NOTICE for attribution. The contest design report must also cite it.
 module soc_top #(
     parameter INIT_FILE = ""
 )(

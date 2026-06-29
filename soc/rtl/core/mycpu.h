@@ -29,4 +29,7 @@
     `define MS_TO_DS_FORWARD_BUS 39
 `endif
 
+// `SIMU` selects behavioral SRAM models for simulation. It MUST be undefined
+// (comment out the line below) before FPGA synthesis, so the Xilinx SRAM IP is
+// bound instead. The sim flow also passes -d SIMU on the command line.
 `define SIMU

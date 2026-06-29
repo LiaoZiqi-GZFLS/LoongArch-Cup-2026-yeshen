@@ -1,4 +1,4 @@
-soc/build/
+build/*
 *.vvp
 *.vcd
 *.wdb
@@ -7,3 +7,7 @@ xsim.dir/
 *.log
 *.pb
 .Xil/
+__pycache__/
+*.pyc
+# keep the build/ dir present so $dumpfile("build/...") works on a clean checkout
+!build/.gitkeep
