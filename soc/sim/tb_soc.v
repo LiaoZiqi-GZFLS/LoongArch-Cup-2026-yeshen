@@ -1,11 +1,11 @@
 `timescale 1ns/1ps
-// Run from: E:/code/Vivado/LoongArch-Cup-2026-yeshen/soc/
-//   cd "E:/code/Vivado/LoongArch-Cup-2026-yeshen/soc"
+// Run from the soc/ directory (so $readmemh resolves "sw/demo.mem"):
+//   cd soc
 //   xvlog -d SIMU -i rtl/core rtl/core/*.v rtl/soc/*.v rtl/periph/*.v sim/tb_soc.v
 //   xelab tb_soc -s tb_soc_sim --debug typical
 //   xsim tb_soc_sim -R
 //
-// INIT_FILE uses absolute path so $readmemh works regardless of xsim cwd.
+// INIT_FILE is relative to the simulator cwd (soc/), keeping the TB portable.
 
 module tb_soc;
   reg aclk=0, aresetn=0;
@@ -13,7 +13,7 @@ module tb_soc;
   reg  [31:0] seen_sum = 32'hffffffff;
   integer cyc = 0;
 
-  soc_top #(.INIT_FILE("E:/code/Vivado/LoongArch-Cup-2026-yeshen/soc/sw/demo.mem")) dut(
+  soc_top #(.INIT_FILE("sw/demo.mem")) dut(
     .aclk(aclk), .aresetn(aresetn), .seg_disp(seg_disp), .cnt_value(cnt_value));
 
   always #5 aclk = ~aclk;
