@@ -17,8 +17,12 @@ module soc_top #(
     wire [ 3:0] wid;   wire [31:0] wdata;  wire [3:0] wstrb; wire wlast, wvalid, wready;
     wire [ 3:0] bid;   wire [1:0] bresp;   wire bvalid, bready;
 
-    wire        seg7_we;
-    wire [31:0] seg7_wdata;
+    // Note: core drives arlock/arcache/arprot/awlock/awcache/awprot/wid, but the
+    // BRAM/MMIO slave ignores them (single master, no cache coherency / protection),
+    // so those nets terminate at the core instance below and are intentionally unused.
+
+    wire        seg7_we;     // MMIO seg7 write pulse from slave
+    wire [31:0] seg7_wdata;  // MMIO seg7 write data from slave
 
     core_top u_core(
         .aclk(aclk), .aresetn(aresetn), .intrpt(8'b0),
