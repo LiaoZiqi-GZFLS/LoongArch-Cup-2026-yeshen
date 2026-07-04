@@ -128,7 +128,7 @@ wire        write_buffer_last;
 
 assign write_buffer_empty = (write_buffer_num == 3'b0) && !write_wait_enable;
 
-assign rd_requst_can_receive = rd_requst_state_is_empty && !(write_wait_enable && !(bvalid && bready));
+assign rd_requst_can_receive = rd_requst_state_is_empty && (read_respond_state == read_respond_empty) && !(write_wait_enable && !(bvalid && bready));
 
 assign data_rd_rdy = rd_requst_can_receive;
 assign inst_rd_rdy = !data_rd_req && rd_requst_can_receive;
@@ -226,8 +226,14 @@ always @(posedge clk) begin
     end
     else case (read_respond_state)
         read_respond_empty: begin
-            if (rvalid && rready) begin 
-                read_respond_state <= read_respond_transfer;
+            if (rvalid && rready) begin
+                if (rlast) begin
+                    // Single-beat response: the slave may deassert rvalid
+                    // immediately, so do not enter transfer state.
+                    read_respond_state <= read_respond_empty;
+                end else begin
+                    read_respond_state <= read_respond_transfer;
+                end
             end
         end
         read_respond_transfer: begin

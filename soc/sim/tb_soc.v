@@ -10,11 +10,18 @@
 module tb_soc;
   reg aclk=0, aresetn=0;
   wire [31:0] seg_disp, cnt_value;
+  wire [31:0] num_data;
+  wire [15:0] led;
+  wire [1:0]  led_rg0, led_rg1;
   reg  [31:0] seen_sum = 32'hffffffff;
   integer cyc = 0;
 
   soc_top #(.INIT_FILE("sw/demo.mem")) dut(
-    .aclk(aclk), .aresetn(aresetn), .seg_disp(seg_disp), .cnt_value(cnt_value));
+    .aclk(aclk), .aresetn(aresetn), .seg_disp(seg_disp), .cnt_value(cnt_value),
+    .num_data(num_data), .led(led), .led_rg0(led_rg0), .led_rg1(led_rg1),
+    .num_csn(), .num_a_g(),
+    .switch(8'hff), .btn_key_row(4'hf), .btn_step(2'b11)
+  );
 
   always #5 aclk = ~aclk;
 

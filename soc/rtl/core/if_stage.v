@@ -319,11 +319,7 @@ assign dmw1_en = ((csr_dmw1[`PLV0] && csr_plv == 2'd0) || (csr_dmw1[`PLV3] && cs
 assign da_mode = csr_da && !csr_pg;
 assign pg_mode = csr_pg && !csr_da;
 
-assign inst_uncache_en = (da_mode && (csr_datf == 2'b0))                 ||
-                         (dmw0_en && (csr_dmw0[`DMW_MAT] == 2'b0))       ||
-                         (dmw1_en && (csr_dmw1[`DMW_MAT] == 2'b0))       ||
-                         (inst_addr_trans_en && (inst_tlb_mat == 2'b0))  ||
-                         disable_cache;
+assign inst_uncache_en = fs_valid && (fs_pc[31:29] == 3'b101);
 
 //assign inst_uncache_en = 1'b1; //used for debug
 

@@ -330,11 +330,7 @@ assign excp_pme  = ms_store_op && data_tlb_v && (csr_plv <= data_tlb_plv) && !da
 
 assign tlb_excp_cancel_req = excp_tlbr || excp_pil || excp_pis || excp_ppi || excp_pme;
 
-assign data_uncache_en = (da_mode && (csr_datm == 2'b0))                 || 
-                         (dmw0_en && (csr_dmw0[`DMW_MAT] == 2'b0))       ||
-                         (dmw1_en && (csr_dmw1[`DMW_MAT] == 2'b0))       ||
-                         (data_addr_trans_en && (data_tlb_mat == 2'b0))  ||
-                         disable_cache;
+assign data_uncache_en = ms_valid && (ms_exe_result[31:29] == 3'b101);
 
 assign ms_flush = (excp | ms_ertn | (ms_csr_we | (ms_ll_w | ms_sc_w) & !excp) | ms_refetch | ms_idle) & ms_valid;
 
