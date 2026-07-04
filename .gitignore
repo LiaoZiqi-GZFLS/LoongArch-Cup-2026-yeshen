@@ -1,20 +1,14 @@
-# Vivado project: regenerated from RTL + soc/scripts/build.tcl, so the
-# tool-managed project tree is not tracked. Keep only the .xpr skeleton.
-cpu_project/*
-!cpu_project/cpu_project.xpr
+# Verilator / build artifacts
+soc/obj_dir*/
+soc/*.log
+soc/build/*.log
+xsim.dir/
+xelab.pb
+xvlog.pb
 
-# Vivado / Xilinx tool noise (anywhere)
-*.jou
-*.log
-*.str
-.Xil/
-vivado*.backup.*
-**/*.cache/
-**/*.hw/
-**/*.sim/
-**/*.runs/
-**/*.gen/
-**/*.ip_user_files/
+# Backups and intermediate binaries
+*.bak*
+*.bin
 
-# downloaded reference artifacts
-*.zip
+# Claude Code session files
+.claude/
