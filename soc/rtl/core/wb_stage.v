@@ -200,7 +200,10 @@ always @(posedge clk) begin
         ws_valid <= ms_to_ws_valid;
     end
 
-    if (ms_to_ws_valid && ws_allowin) begin
+    if (reset) begin
+        ms_to_ws_bus_r <= {`MS_TO_WS_BUS_WD{1'b0}};
+    end
+    else if (ms_to_ws_valid && ws_allowin) begin
         ms_to_ws_bus_r <= ms_to_ws_bus;
     end
 end

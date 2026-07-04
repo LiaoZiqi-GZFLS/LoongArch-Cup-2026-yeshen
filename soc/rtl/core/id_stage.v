@@ -390,8 +390,9 @@ assign ds_to_es_valid = ds_valid && ds_ready_go;
 always @(posedge clk) begin   //bug1 no reset; branch no delay slot
     if (reset || flush_sign) begin
         ds_valid <= 1'b0;
+        fs_to_ds_bus_r <= {`FS_TO_DS_BUS_WD{1'b0}};
     end
-    else begin 
+    else begin
         if (ds_allowin) begin   //bug2 ??
             if ((btb_pre_error_flush && es_allowin) || branch_slot_cancel) begin
                 ds_valid <= 1'b0;
