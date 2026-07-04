@@ -559,12 +559,20 @@ module data_bank_sram
 reg [31:0] mem_reg [255:0];
 reg [31:0] output_buffer;
 
+integer i;
+initial begin
+    output_buffer = {WIDTH{1'b0}};
+    for (i = 0; i < DEPTH; i = i + 1) begin
+        mem_reg[i] = {WIDTH{1'b0}};
+    end
+end
+
 always @(posedge clka) begin
     if (ena) begin
         if (wea) begin
             if (wea[0]) begin
-                mem_reg[addra][ 7: 0] <= dina[ 7: 0]; 
-            end 
+                mem_reg[addra][ 7: 0] <= dina[ 7: 0];
+            end
 
             if (wea[1]) begin
                 mem_reg[addra][15: 8] <= dina[15: 8];
@@ -586,7 +594,7 @@ end
 
 assign douta = output_buffer;
 
-endmodule 
+endmodule
 
 module tagv_sram
 #( 
@@ -604,6 +612,14 @@ module tagv_sram
 
 reg [20:0] mem_reg [255:0];
 reg [20:0] output_buffer;
+
+integer j;
+initial begin
+    output_buffer = {WIDTH{1'b0}};
+    for (j = 0; j < DEPTH; j = j + 1) begin
+        mem_reg[j] = {WIDTH{1'b0}};
+    end
+end
 
 always @(posedge clka) begin
     if (ena) begin

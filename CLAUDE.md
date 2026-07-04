@@ -10,6 +10,8 @@ The repository currently contains:
 - `Description.md` — the full official contest requirements and hard constraints (Chinese). **Read this before making design decisions.**
 - `open-la500-master/` — the **openLA500 (齐物)** processor core, a third-party open-source LA32R core (single-issue 5-stage pipeline) used as the starting base. This is the RTL you will adapt.
 - `open-la500-master.zip` — the original archive of the above (ignore; the extracted folder is authoritative).
+- `soc/sim/` — testbenches for functional and performance tests.
+- `soc/build/` — file lists and scripts for Verilator and Vivado `xsim`.
 
 There is **no Vivado project, build script, or testbench checked in yet**. Synthesis is done through Vivado 2023.2 (GUI or tcl); the RTL + the two SRAM IP cores in `open-la500-master/IP/` are the inputs you assemble into a project.
 
@@ -50,8 +52,45 @@ Pipeline handshake protocol (see `doc/设计概述.md`): every stage uses `stage
 
 ## Compile-time macros (in `mycpu.h`, both commented out by default)
 
-- **`` `define SIMU ``** — selects **behavioral SRAM models** (defined inside `icache.v`/`dcache.v`) for simulation. When **undefined** (default), the same-named module instances bind to the **Xilinx IP** `IP/data_bank_sram.xcix` and `IP/tagv_sram.xcix`, which must be added to the Vivado project for synthesis. Define `SIMU` for RTL simulation; leave it off for synthesis.
+- **`` `define SIMU ``** — selects **behavioral SRAM models** (defined inside `dcache.v`) for simulation. In this SoC `mycpu.h` defines `SIMU` permanently; Vivado infers the reg-array templates as Block RAM, so the Xilinx SRAM IP (`IP/data_bank_sram.xcix` / `tagv_sram.xcix`) is optional. The simulation flows below pass `-d SIMU` explicitly.
 - **`` `define HAS_LACC ``** — enables the **LaCC** (LoongArch32R Custom Coprocessor Interface), a hook for adding custom instructions (opcode `1100`). Touching it changes inter-stage bus widths (`DS_TO_ES_BUS_WD` grows) and adds `` `ifdef HAS_LACC `` paths through `id_stage.v`/`exe_stage.v`/`mycpu_top.v`. Interface and how-to-add-an-instruction are in `doc/lacc接口.md`. Leave off unless intentionally extending the ISA.
+
+## Non-FPGA simulation flows
+
+Run from the `soc/` directory.
+
+### Verilator functional test (`tb_func_fast`)
+
+Use the captured script:
+
+```bash
+bash build/run_verilator_func_fast.sh
+```
+
+Manual equivalent (MSYS2/Windows, Verilator 5.x):
+
+```bash
+export TMP=$(cygpath -m "$TMP")
+export TEMP=$(cygpath -m "$TEMP")
+export TMPDIR=$(cygpath -m "${TMPDIR:-$TMP}")
+/c/Strawberry/perl/bin/perl.exe /c/App/verilator-install/bin/verilator \
+  --main --timing +incdir+rtl/core -f build/func_fast_files.f -Wno-fatal -Mdir obj_dir_func_fast
+mingw32-make -C obj_dir_func_fast -f Vtb_func_fast.mk \
+  CFG_CXXFLAGS_PCH_I=-include CFG_CXXFLAGS_COROUTINES=-fcoroutines
+./obj_dir_func_fast/Vtb_func_fast.exe
+```
+
+Expected result: `PASS tb_func_fast` with `num_data=0x3a00003a`, `led_rg0=01`, `led_rg1=01`.
+
+### Vivado behavioral simulation (`xsim`)
+
+```bash
+bash build/xsim_func_fast.sh
+```
+
+Expected result: `PASS tb_func_fast` at around 5.3 ms.
+
+Note: the openLA500 RTL contains many registers without reset values. Vivado xsim is a 4-state simulator and previously failed to boot because the cache tag/data SRAM output buffers were uninitialized (`X`), making the cache-hit signal `X` and stalling the pipeline. The behavioral SRAM models in `dcache.v` now have `initial` blocks that zero the arrays and output buffers when `SIMU` is defined. This does not affect Verilator (2-state, already defaults to 0) or synthesis (the `SIMU` guard).
 
 ## Documentation
 
