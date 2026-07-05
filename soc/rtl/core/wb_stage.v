@@ -90,6 +90,40 @@ wire        ws_ready_go;
 
 wire        flush_sign;
 
+// Exception entering WB is detected from the MEM->WB bus one cycle before the
+// instruction is considered valid in WB.  Latch the exception on the negative
+// edge so that excp_flush is stable at the following positive edge.  This
+// avoids a Verilog scheduling race where CSR/if_stage execute before ws_valid
+// is updated and therefore miss the exception.
+reg                         excp_pending_neg;
+reg  [`MS_TO_WS_BUS_WD -1:0] excp_bus_r;
+// Capture an exception entering WB.  Under normal conditions latch it when
+// WB can accept the MEM instruction.  Additionally, if a refetch_flush from
+// an older csrwr/csrxchg is blocking WB just as the younger instruction in
+// MEM raises an exception, capture it on the rising edge of ms_to_ws_valid
+// so the exception is not discarded.
+reg                         ms_to_ws_valid_d;
+always @(negedge clk) begin
+    if (reset) begin
+        excp_pending_neg <= 1'b0;
+        ms_to_ws_valid_d <= 1'b0;
+    end
+    else begin
+        ms_to_ws_valid_d <= ms_to_ws_valid;
+        if (ms_to_ws_valid && !ms_to_ws_valid_d && ms_to_ws_bus[70] && refetch_flush) begin
+            excp_pending_neg <= 1'b1;
+            excp_bus_r       <= ms_to_ws_bus;
+        end
+        else if (ms_to_ws_valid && ws_allowin && !flush_sign && ms_to_ws_bus[70]) begin
+            excp_pending_neg <= 1'b1;
+            excp_bus_r       <= ms_to_ws_bus;
+        end
+        else begin
+            excp_pending_neg <= 1'b0;
+        end
+    end
+end
+
 reg [`MS_TO_WS_BUS_WD -1:0] ms_to_ws_bus_r;
 wire        ws_gr_we;
 wire        ws_excp;
@@ -191,7 +225,7 @@ assign ws_to_rf_bus = {rf_we   ,  //37:37
                       };
 
 assign ws_ready_go = ~debug_break_point;
-assign ws_allowin  = !ws_valid || ws_ready_go;
+assign ws_allowin  = (!ws_valid || ws_ready_go) && !flush_sign;
 always @(posedge clk) begin
     if (reset || flush_sign) begin
         ws_valid <= 1'b0;
@@ -221,10 +255,10 @@ assign rf_we    = ws_gr_we & real_valid;
 assign rf_waddr = ws_dest;
 assign rf_wdata = ws_final_result;
 
-assign excp_flush   = ws_excp & ws_valid;
+assign excp_flush   = excp_pending_neg;
 assign ertn_flush   = ws_ertn & real_valid;
 assign refetch_flush = (ws_csr_we || ((ws_ll_w || ws_sc_w) && !ws_excp) || ws_refetch) && ws_valid;
-assign csr_era      = ws_pc;
+assign csr_era      = excp_flush ? excp_bus_r[31:0] : ws_pc;
 assign csr_wr_en    = ws_csr_we && real_valid;
 assign wr_csr_addr  = ws_csr_idx;
 assign wr_csr_data  = ws_csr_result; 
@@ -272,29 +306,33 @@ excp_num[0]  int
         
 */
 
-//exception have piority, onle one exception is valid 
-assign {csr_ecode, 
-        va_error, 
-        bad_va, 
-        csr_esubcode, 
+//exception have piority, onle one exception is valid
+wire [15:0] ws_excp_num_mux = excp_flush ? excp_bus_r[134:119] : ws_excp_num;
+wire [31:0] ws_error_va_mux = excp_flush ? excp_bus_r[168:137] : ws_error_va;
+wire [31:0] ws_pc_mux       = excp_flush ? excp_bus_r[31:0]     : ws_pc;
+wire        ws_valid_mux    = excp_flush ? 1'b1                 : ws_valid;
+assign {csr_ecode,
+        va_error,
+        bad_va,
+        csr_esubcode,
         excp_tlbrefill,
-        excp_tlb, 
-        excp_tlb_vppn} = ws_excp_num[ 0] ? {`ECODE_INT , 1'b0    , 32'b0      , 9'b0          , 1'b0    , 1'b0    , 19'b0             } :
-                         ws_excp_num[ 1] ? {`ECODE_ADEF, ws_valid, ws_pc      , `ESUBCODE_ADEF, 1'b0    , 1'b0    , 19'b0             } :
-                         ws_excp_num[ 2] ? {`ECODE_TLBR, ws_valid, ws_pc      , 9'b0          , ws_valid, ws_valid, ws_pc[31:13]      } :
-                         ws_excp_num[ 3] ? {`ECODE_PIF , ws_valid, ws_pc      , 9'b0          , 1'b0    , ws_valid, ws_pc[31:13]      } :
-                         ws_excp_num[ 4] ? {`ECODE_PPI , ws_valid, ws_pc      , 9'b0          , 1'b0    , ws_valid, ws_pc[31:13]      } :
-                         ws_excp_num[ 5] ? {`ECODE_SYS , 1'b0    , 32'b0      , 9'b0          , 1'b0    , 1'b0    , 19'b0             } :
-                         ws_excp_num[ 6] ? {`ECODE_BRK , 1'b0    , 32'b0      , 9'b0          , 1'b0    , 1'b0    , 19'b0             } :
-                         ws_excp_num[ 7] ? {`ECODE_INE , 1'b0    , 32'b0      , 9'b0          , 1'b0    , 1'b0    , 19'b0             } :
-                         ws_excp_num[ 8] ? {`ECODE_IPE , 1'b0    , 32'b0      , 9'b0          , 1'b0    , 1'b0    , 19'b0             } :   //close ipe excp now
-                         ws_excp_num[ 9] ? {`ECODE_ALE , ws_valid, ws_error_va, 9'b0          , 1'b0    , 1'b0    , 19'b0             } :
-                         ws_excp_num[11] ? {`ECODE_TLBR, ws_valid, ws_error_va, 9'b0          , ws_valid, ws_valid, ws_error_va[31:13]} :
-                         ws_excp_num[12] ? {`ECODE_PME , ws_valid, ws_error_va, 9'b0          , 1'b0    , ws_valid, ws_error_va[31:13]} :
-                         ws_excp_num[13] ? {`ECODE_PPI , ws_valid, ws_error_va, 9'b0          , 1'b0    , ws_valid, ws_error_va[31:13]} :
-                         ws_excp_num[14] ? {`ECODE_PIS , ws_valid, ws_error_va, 9'b0          , 1'b0    , ws_valid, ws_error_va[31:13]} :
-                         ws_excp_num[15] ? {`ECODE_PIL , ws_valid, ws_error_va, 9'b0          , 1'b0    , ws_valid, ws_error_va[31:13]} :
-                         69'b0;
+        excp_tlb,
+        excp_tlb_vppn} = ws_excp_num_mux[ 0] ? {`ECODE_INT , 1'b0        , 32'b0           , 9'b0          , 1'b0        , 1'b0        , 19'b0                       } :
+                          ws_excp_num_mux[ 1] ? {`ECODE_ADEF, ws_valid_mux, ws_pc_mux       , `ESUBCODE_ADEF, 1'b0        , 1'b0        , 19'b0                       } :
+                          ws_excp_num_mux[ 2] ? {`ECODE_TLBR, ws_valid_mux, ws_pc_mux       , 9'b0          , ws_valid_mux, ws_valid_mux, ws_pc_mux[31:13]            } :
+                          ws_excp_num_mux[ 3] ? {`ECODE_PIF , ws_valid_mux, ws_pc_mux       , 9'b0          , 1'b0        , ws_valid_mux, ws_pc_mux[31:13]            } :
+                          ws_excp_num_mux[ 4] ? {`ECODE_PPI , ws_valid_mux, ws_pc_mux       , 9'b0          , 1'b0        , ws_valid_mux, ws_pc_mux[31:13]            } :
+                          ws_excp_num_mux[ 5] ? {`ECODE_SYS , 1'b0        , 32'b0           , 9'b0          , 1'b0        , 1'b0        , 19'b0                       } :
+                          ws_excp_num_mux[ 6] ? {`ECODE_BRK , 1'b0        , 32'b0           , 9'b0          , 1'b0        , 1'b0        , 19'b0                       } :
+                          ws_excp_num_mux[ 7] ? {`ECODE_INE , 1'b0        , 32'b0           , 9'b0          , 1'b0        , 1'b0        , 19'b0                       } :
+                          ws_excp_num_mux[ 8] ? {`ECODE_IPE , 1'b0        , 32'b0           , 9'b0          , 1'b0        , 1'b0        , 19'b0                       } :   //close ipe excp now
+                          ws_excp_num_mux[ 9] ? {`ECODE_ALE , ws_valid_mux, ws_error_va_mux , 9'b0          , 1'b0        , 1'b0        , 19'b0                       } :
+                          ws_excp_num_mux[11] ? {`ECODE_TLBR, ws_valid_mux, ws_error_va_mux , 9'b0          , ws_valid_mux, ws_valid_mux, ws_error_va_mux[31:13]      } :
+                          ws_excp_num_mux[12] ? {`ECODE_PME , ws_valid_mux, ws_error_va_mux , 9'b0          , 1'b0        , ws_valid_mux, ws_error_va_mux[31:13]      } :
+                          ws_excp_num_mux[13] ? {`ECODE_PPI , ws_valid_mux, ws_error_va_mux , 9'b0          , 1'b0        , ws_valid_mux, ws_error_va_mux[31:13]      } :
+                          ws_excp_num_mux[14] ? {`ECODE_PIS , ws_valid_mux, ws_error_va_mux , 9'b0          , 1'b0        , ws_valid_mux, ws_error_va_mux[31:13]      } :
+                          ws_excp_num_mux[15] ? {`ECODE_PIL , ws_valid_mux, ws_error_va_mux , 9'b0          , 1'b0        , ws_valid_mux, ws_error_va_mux[31:13]      } :
+                          69'b0;
 
 //invtlb ins
 assign invtlb_op = ws_dest;

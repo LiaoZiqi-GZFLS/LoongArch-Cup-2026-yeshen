@@ -95,7 +95,7 @@ wire         ws_lladdr_set;
 wire [27:0]  ws_lladdr;
 wire         has_int;
 wire         csr_wr_en;
-wire         excp_flush; 
+wire         excp_flush;
 wire         ertn_flush;
 wire         icacop_flush;
 wire         idle_flush;
@@ -258,6 +258,8 @@ wire         es_to_ds_valid;
 wire         ms_to_ds_valid;
 wire         ws_to_ds_valid;
 wire         write_buffer_empty;
+wire         inst_rd_inflight;
+wire         data_rd_inflight;
 wire [ 4:0]  preld_hint;
 wire         preld_en;
 
@@ -430,7 +432,8 @@ if_stage if_stage(
     .inst_tlb_v        (inst_tlb_v       ),
     .inst_tlb_d        (inst_tlb_d       ),
     .inst_tlb_mat      (inst_tlb_mat     ),
-    .inst_tlb_plv      (inst_tlb_plv     )
+    .inst_tlb_plv      (inst_tlb_plv     ),
+    .inst_rd_inflight  (inst_rd_inflight )
 );
 // ID stage
 id_stage id_stage(
@@ -569,9 +572,10 @@ exe_stage exe_stage(
     //from csr
     .csr_vppn             (csr_vppn            ),
     //to addr trans
-    .data_addr            (data_vaddr          ), 
+    .data_addr            (data_vaddr          ),
     .data_fetch           (data_fetch          ),
-    //from ms 
+    .data_rd_inflight     (data_rd_inflight    ),
+    //from ms
     .ms_wr_tlbehi         (ms_wr_tlbehi        ),
     .ms_flush             (ms_flush            )
 );
@@ -708,7 +712,7 @@ wb_stage wb_stage(
     .csr_era           (ws_csr_era       ),
     .csr_esubcode      (ws_csr_esubcode  ),
     .csr_ecode         (ws_csr_ecode     ),
-    .excp_flush        (excp_flush       ),     
+    .excp_flush        (excp_flush       ),
     .ertn_flush        (ertn_flush       ),
     .refetch_flush     (refetch_flush    ),
     .icacop_flush      (icacop_flush     ),
@@ -947,7 +951,9 @@ axi_bridge axi_bridge(
     .data_wr_wstrb  (data_wr_wstrb  ),
     .data_wr_data   (data_wr_data   ),
     .data_wr_rdy    (data_wr_rdy    ),
-    .write_buffer_empty (write_buffer_empty)
+    .write_buffer_empty (write_buffer_empty),
+    .inst_rd_inflight (inst_rd_inflight),
+    .data_rd_inflight (data_rd_inflight)
 );
 
 addr_trans #(TLBNUM) addr_trans(

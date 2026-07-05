@@ -44,6 +44,8 @@ module if_stage(
     input  [ 1:0]                  csr_plv           ,
     input  [ 1:0]                  csr_datf          ,
     input                          disable_cache     ,
+    //from axi bridge
+    input                          inst_rd_inflight,
     //to btb
     output [31:0]                  fetch_pc          ,
     output                         fetch_en          ,
@@ -132,7 +134,26 @@ assign fs_to_ds_bus = {btb_ret_pc_t,    //108:77
                        fs_pc            //31:0
                       };
 
-assign flush_sign = ertn_flush || excp_flush || refetch_flush || icacop_flush || idle_flush;
+// Hold the exception fetch request until the IF stage has actually captured
+// the handler PC in fs_pc.  A one-cycle excp_flush is otherwise released
+// while the pipeline is stalled at the IF/DS boundary (e.g. an older csrwr
+// refetch blocks ws_allowin), causing the IF stage to fall back to the
+// faulting instruction's sequential PC and skip the handler entirely.
+reg        excp_flush_req;
+always @(posedge clk) begin
+    if (reset) begin
+        excp_flush_req <= 1'b0;
+    end
+    else if (excp_flush) begin
+        excp_flush_req <= 1'b1;
+    end
+    else if (excp_flush_req && fs_pc == excp_entry) begin
+        excp_flush_req <= 1'b0;
+    end
+end
+wire excp_flush_if = excp_flush || excp_flush_req;
+
+assign flush_sign = ertn_flush || excp_flush_if || refetch_flush || icacop_flush || idle_flush;
 
 assign flush_inst_delay = flush_sign && !inst_addr_ok || idle_flush;
 assign flush_inst_go_dirt = flush_sign && inst_addr_ok && !idle_flush;
@@ -155,11 +176,19 @@ always @(posedge clk) begin
             end
         end
         flush_inst_req_full: begin
-            if(pfs_ready_go) begin
+            if(excp_flush) begin
                 flush_inst_req_state  <= flush_inst_req_empty;
             end
-            else if (flush_sign) begin
-                flush_inst_req_buffer <= nextpc;
+            else if(pfs_ready_go) begin
+                flush_inst_req_state  <= flush_inst_req_empty;
+            end
+            else if (flush_sign && !excp_flush_if) begin
+                // Overwrite with the *new* non-exception flush target rather
+                // than nextpc.  Exception flushes have the highest nextpc
+                // priority, so the buffer must not be clobbered by a
+                // coincident refetch/ertn/icacop while we wait for the
+                // icache to accept the handler address.
+                flush_inst_req_buffer <= inst_flush_pc;
             end
         end
     endcase
@@ -260,8 +289,8 @@ assign excp_entry   = {32{excp_tlbrefill}}  & csr_tlbrentry |
 assign inst_flush_pc = {32{ertn_flush}}                                  & csr_era         |
                        {32{refetch_flush || icacop_flush || idle_flush}} & (ws_pc + 32'h4) ;
 
-assign nextpc = (flush_inst_req_state == flush_inst_req_full)                   ? flush_inst_req_buffer     :
-                excp_flush                                                      ? excp_entry                :
+assign nextpc = excp_flush_if                                                    ? excp_entry                :
+                (flush_inst_req_state == flush_inst_req_full)                   ? flush_inst_req_buffer     :
                 (ertn_flush || refetch_flush || icacop_flush || idle_flush)     ? inst_flush_pc             :
                 (br_target_inst_req_state == br_target_inst_req_wait_br_target) ? br_target_inst_req_buffer :
                 btb_pre_error_flush && fs_valid                                 ? btb_pre_error_flush_target:
@@ -274,7 +303,7 @@ assign nextpc = (flush_inst_req_state == flush_inst_req_full)                   
 assign tlb_excp_lock_pc = tlb_excp_cancel_req && br_target_inst_req_state != br_target_inst_req_wait_br_target && flush_inst_req_state != flush_inst_req_full;
 
 //when flush_sign meet icache_busy 1, flush_sign's inst valid should not set immediately
-assign inst_valid = (fs_allowin && !pfs_excp && !tlb_excp_lock_pc || flush_sign || btb_pre_error_flush) && !(idle_flush || idle_lock);
+assign inst_valid = (fs_allowin && !pfs_excp && !tlb_excp_lock_pc || flush_sign || btb_pre_error_flush) && !(idle_flush || idle_lock) && !inst_rd_inflight;
 assign inst_op     = 1'b0;
 assign inst_wstrb  = 4'h0;
 assign inst_addr   = nextpc; //nextpc

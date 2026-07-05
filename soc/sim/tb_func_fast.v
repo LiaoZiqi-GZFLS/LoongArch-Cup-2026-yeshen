@@ -22,7 +22,8 @@ module tb_func_fast;
 
   always @(posedge aclk) if (aresetn) begin
     if (num_data !== num_prev) begin
-      $display("[%0t] num_data <= 0x%08x  led=%04x led_rg0=%b led_rg1=%b", $time, num_data, led, led_rg0, led_rg1);
+      $display("[%0t] num_data <= 0x%08x  led=%04x led_rg0=%b led_rg1=%b",
+               $time, num_data, led, led_rg0, led_rg1);
       num_prev   <= num_data;
       num_stable <= 32'd0;
     end else begin
@@ -40,7 +41,8 @@ module tb_func_fast;
         if (num_data === 32'h3a00003a && led_rg0 === 2'b01 && led_rg1 === 2'b01)
           $display("PASS tb_func_fast");
         else
-          $display("FAIL tb_func_fast: num_data=0x%08x led_rg0=%b led_rg1=%b", num_data, led_rg0, led_rg1);
+          $display("FAIL tb_func_fast: num_data=0x%08x led_rg0=%b led_rg1=%b",
+                   num_data, led_rg0, led_rg1);
         $finish;
       end
     end

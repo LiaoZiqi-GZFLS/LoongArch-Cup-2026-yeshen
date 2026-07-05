@@ -71,7 +71,9 @@ module exe_stage(
     output        data_fetch        ,
     //from ms
     input         ms_wr_tlbehi      ,
-    input         ms_flush          
+    input         ms_flush          ,
+    //from axi bridge
+    input         data_rd_inflight
 );
 
 reg         es_valid      ;

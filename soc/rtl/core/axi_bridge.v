@@ -71,7 +71,9 @@ module axi_bridge(
     input  [ 3:0]    data_wr_wstrb   ,
     input  [127:0]   data_wr_data    ,
     output           data_wr_rdy     ,
-    output           write_buffer_empty
+    output           write_buffer_empty,
+    output reg       inst_rd_inflight,
+    output reg       data_rd_inflight
 );
 
 //fixed signal
@@ -242,6 +244,21 @@ always @(posedge clk) begin
             end
         end
     endcase
+end
+
+always @(posedge clk) begin
+    if (reset) begin
+        inst_rd_inflight <= 1'b0;
+        data_rd_inflight <= 1'b0;
+    end
+    else begin
+        if (arvalid && arready) begin
+            if (!arid[0]) inst_rd_inflight <= 1'b1;
+            else          data_rd_inflight <= 1'b1;
+        end
+        if (inst_ret_valid && inst_ret_last) inst_rd_inflight <= 1'b0;
+        if (data_ret_valid && data_ret_last) data_rd_inflight <= 1'b0;
+    end
 end
 
 always @(posedge clk) begin

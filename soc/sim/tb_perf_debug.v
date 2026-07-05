@@ -13,7 +13,7 @@ module tb_perf_debug;
     .aclk(aclk), .aresetn(aresetn), .seg_disp(seg_disp), .cnt_value(cnt_value),
     .num_data(num_data), .led(led), .led_rg0(led_rg0), .led_rg1(led_rg1),
     .num_csn(), .num_a_g(),
-    .switch(8'hff), .btn_key_row(4'hf), .btn_step(2'b11)
+    .switch(8'h1e), .btn_key_row(4'hf), .btn_step(2'b11)
   );
 
   always #5 aclk = ~aclk;
@@ -113,6 +113,15 @@ module tb_perf_debug;
 
   wire        ws_excp    = dut.u_core.wb_stage.excp_flush;
   wire [31:0] excp_num   = dut.u_core.wb_stage.ws_excp_num;
+
+  wire        ds_allowin_sig = dut.u_core.ds_allowin;
+  wire        ds_ready_go_sig = ds_ready_go;
+  wire        es_allowin_sig = dut.u_core.es_allowin;
+  wire        es_ready_go_sig = es_ready_go;
+  wire        ms_allowin_sig = dut.u_core.ms_allowin;
+  wire        ms_ready_go_sig = ms_ready_go;
+  wire        ws_allowin_sig = dut.u_core.ws_allowin;
+  wire        ms_valid_sig = ms_valid;
 
   wire [31:0] ds_inst    = dut.u_core.id_stage.ds_inst;
   wire        fetch_btb_target = dut.u_core.if_stage.fetch_btb_target;
@@ -229,45 +238,47 @@ module tb_perf_debug;
   end
 
   // ---- stuck-in-write-loop watchdog ----
-  reg [31:0] stuck_cyc;
-  reg [31:0] stuck_start;
-  reg        stuck_print;
+  reg [31:0] last_if_pc = 32'h0;
+  reg [31:0] stuck_cyc = 32'd0;
+  reg        stuck_print = 1'b0;
   always @(posedge aclk) if (aresetn) begin
-    if (es_pc != 32'h1c005fd8) begin
-      stuck_cyc  <= 32'd0;
+    if (if_nextpc != last_if_pc) begin
+      last_if_pc  <= if_nextpc;
+      stuck_cyc   <= 32'd0;
       stuck_print <= 1'b0;
     end else begin
-      if (stuck_cyc == 32'd0) stuck_start <= cyc;
+      if (stuck_cyc == 32'd0)
+        $display("[STUCK start cyc=%0d] pc=%08x", cyc, if_nextpc);
       stuck_cyc <= stuck_cyc + 1;
-      if (stuck_cyc == 32'd30) stuck_print <= 1'b1;
+      if (stuck_cyc == 32'd1000) stuck_print <= 1'b1;
     end
 
-    if (stuck_print && (stuck_cyc[2:0] == 3'd0)) begin
-      $display("[STUCK cyc=%0d delta=%0d] PCs if=%08x fs=%08x ds=%08x es=%08x ms=%08x ws=%08x",
-               cyc, cyc - stuck_start, if_nextpc, fs_pc, ds_pc, es_pc, ms_pc, ws_pc);
-      $display("  regs r12=%08x r23=%08x r24=%08x r25=%08x r26=%08x",
+    if (stuck_print && (stuck_cyc[9:0] == 10'd0)) begin
+      $display("[STUCK cyc=%0d] if=%08x fs=%08x ds=%08x es=%08x ms=%08x ws=%08x",
+               cyc, if_nextpc, fs_pc, ds_pc, es_pc, ms_pc, ws_pc);
+      $display("  handshakes dsV=%b dsR=%b dsA=%b esR=%b esA=%b msV=%b msR=%b msA=%b wsV=%b wsA=%b",
+               ds_valid, ds_ready_go_sig, ds_allowin_sig,
+               es_ready_go_sig, es_allowin_sig,
+               ms_valid_sig, ms_ready_go_sig, ms_allowin_sig,
+               ws_valid, ws_allowin_sig);
+      $display("  regs r1=%08x r3=%08x r4=%08x r12=%08x r13=%08x r14=%08x r15=%08x r28=%08x",
+               dut.u_core.id_stage.u_regfile.rf[1],
+               dut.u_core.id_stage.u_regfile.rf[3],
+               dut.u_core.id_stage.u_regfile.rf[4],
                dut.u_core.id_stage.u_regfile.rf[12],
-               dut.u_core.id_stage.u_regfile.rf[23],
-               dut.u_core.id_stage.u_regfile.rf[24],
-               dut.u_core.id_stage.u_regfile.rf[25],
-               dut.u_core.id_stage.u_regfile.rf[26]);
-      $display("  dcache state=%b rd_req=%b rd_addr=%08x wr_req=%b wr_addr=%08x data_ok=%b rdata=%08x",
+               dut.u_core.id_stage.u_regfile.rf[13],
+               dut.u_core.id_stage.u_regfile.rf[14],
+               dut.u_core.id_stage.u_regfile.rf[15],
+               dut.u_core.id_stage.u_regfile.rf[28]);
+      $display("  dcache state=%b rd_req=%b rd_addr=%08x wr_req=%b wr_addr=%08x data_ok=%b",
                dcache_state, data_rd_req, dut.u_core.dcache.rd_addr,
-               dut.u_core.dcache.wr_req, dut.u_core.dcache.wr_addr,
-               data_data_ok, data_rdata);
-      $display("  axi bridge rrq=%b rrs=%b arv=%b rrv=%b rrl=%b | wrq=%b wwait=%b awv=%b wv=%b bv=%b",
-               bridge_rrq_state, bridge_rrs_state, bridge_arvalid, bridge_rvalid, bridge_rlast,
+               dut.u_core.dcache.wr_req, dut.u_core.dcache.wr_addr, data_data_ok);
+      $display("  axi bridge rrq=%b rrs=%b arv=%b rrv=%b | wrq=%b wwait=%b awv=%b wv=%b bv=%b",
+               bridge_rrq_state, bridge_rrs_state, bridge_arvalid, bridge_rvalid,
                dut.u_core.axi_bridge.write_requst_state, axi_write_wait,
                dut.u_core.axi_bridge.awvalid, dut.u_core.axi_bridge.wvalid, dut.u_core.axi_bridge.bvalid);
       $display("  mem slave rstate=%b raddr=%08x rcnt=%0d | wstate=%b waddr=%08x",
                mem_rstate, mem_r_addr, mem_r_cnt, dut.u_mem.wstate, dut.u_mem.w_addr);
-      $display("  dcache rd_req=%b rd_rdy=%b rd_addr=%08x | m AR=%b/%b addr=%08x id=%h | m R=%b/%b last=%b id=%h data=%08x",
-               dut.u_core.dcache.rd_req, dut.u_core.axi_bridge.data_rd_rdy, dut.u_core.dcache.rd_addr,
-               m_arvalid, m_arready, m_araddr, dut.u_core.axi_bridge.arid,
-               m_rvalid, m_rready, m_rlast, dut.u_core.axi_bridge.rid, m_rdata);
-      $display("  s0 AR=%b/%b addr=%08x id=%h | s0 R=%b/%b last=%b id=%h data=%08x",
-               s0_arvalid, s0_arready, s0_araddr, dut.u_dec.s0_arid,
-               s0_rvalid, s0_rready, s0_rlast, dut.u_dec.s0_rid, s0_rdata);
     end
 
     if (cyc[19:0] == 20'd0) begin
@@ -286,7 +297,7 @@ module tb_perf_debug;
   initial begin
     repeat (4) @(negedge aclk);
     aresetn = 1;
-    for (cyc=0; cyc<25_000; cyc=cyc+1) begin
+    for (cyc=0; cyc<5_000_000; cyc=cyc+1) begin
       @(negedge aclk);
     end
     $display("---- final at cyc=%0d ----", cyc);

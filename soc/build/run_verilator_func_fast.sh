@@ -27,5 +27,11 @@ echo "== Compile Verilated C++ =="
 mingw32-make -C obj_dir_func_fast -f Vtb_func_fast.mk \
   CFG_CXXFLAGS_PCH_I=-include CFG_CXXFLAGS_COROUTINES=-fcoroutines
 
+echo "== Link executable =="
+/c/msys64/mingw64/bin/g++.exe -std=c++20 -fcoroutines -O2 -DVL_TIME_CONTEXT \
+  -Iobj_dir_func_fast -IC:/App/verilator-install/include \
+  obj_dir_func_fast/Vtb_func_fast__ALL.a obj_dir_func_fast/libverilated.a \
+  -o obj_dir_func_fast/Vtb_func_fast.exe -lpthread
+
 echo "== Run simulation =="
 ./obj_dir_func_fast/Vtb_func_fast.exe

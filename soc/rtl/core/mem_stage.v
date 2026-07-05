@@ -251,7 +251,10 @@ assign ms_ready_go    = (data_data_ok || data_buff_enable) || !access_mem || exc
 assign ms_allowin     = !ms_valid || ms_ready_go && ws_allowin;
 assign ms_to_ws_valid = ms_valid && ms_ready_go;
 always @(posedge clk) begin
-    if (reset || flush_sign) begin
+    // Preserve a younger instruction in MEM that has raised an exception
+    // when an older instruction in WB asserts a refetch_flush (e.g. csrwr).
+    // Without this the exception is discarded before it can be captured in WB.
+    if (reset || (flush_sign && !(refetch_flush && excp))) begin
         ms_valid <= 1'b0;
     end
     else if (ms_allowin) begin
