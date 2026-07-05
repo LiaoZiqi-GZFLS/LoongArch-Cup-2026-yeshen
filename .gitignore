@@ -6,9 +6,38 @@ xsim.dir/
 xelab.pb
 xvlog.pb
 
+# Vivado project / synthesis artifacts
+cpu_project/*.cache/
+cpu_project/*.hw/
+cpu_project/*.runs/
+cpu_project/*.srcs/
+cpu_project/dfx_runtime.txt
+cpu_project/vivado.jou
+cpu_project/vivado.log
+*.jou
+*.log
+*.dcp
+*.str
+*.wdf
+*.rpt
+*.txt
+
 # Backups and intermediate binaries
 *.bak*
 *.bin
 
 # Claude Code session files
 .claude/
+
+# Temporary debugging / analysis files generated during bring-up
+soc/func_run_trace*.txt
+soc/handler.asm
+soc/lowcaller.asm
+soc/lowtable.asm
+soc/r26_seq.txt
+soc/readmem.py
+soc/sub*.asm
+
+# Generated memory / hex files
+soc/sw/*.mem
+soc/sw/*.vh
