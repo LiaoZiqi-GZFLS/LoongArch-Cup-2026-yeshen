@@ -8,12 +8,13 @@ This is a **2026 龙芯杯 (LoongArch Cup) team-contest preliminary-round** work
 
 The repository currently contains:
 - `Description.md` — the full official contest requirements and hard constraints (Chinese). **Read this before making design decisions.**
-- `open-la500-master/` — the **openLA500 (齐物)** processor core, a third-party open-source LA32R core (single-issue 5-stage pipeline) used as the starting base. This is the RTL you will adapt.
-- `open-la500-master.zip` — the original archive of the above (ignore; the extracted folder is authoritative).
-- `soc/sim/` — testbenches for functional and performance tests.
-- `soc/build/` — file lists and scripts for Verilator and Vivado `xsim`.
+- `open-la500-master/` — the **openLA500 (齐物)** processor core, a third-party open-source LA32R core (single-issue 5-stage pipeline) used as the starting base.
+- `soc/` — the integrated SoC: RTL under `soc/rtl/core/`, testbenches under `soc/sim/`, file lists and scripts under `soc/build/`, and build/utility scripts under `soc/scripts/`.
+- `cpu_project/` — the Vivado 2023.2 project (`cpu_project/cpu_project.xpr`) used for synthesis and implementation.
+- `chiplab/` — the ChipLab regression environment (subtree or submodule) used for committee functional and performance tests.
+- `docs/` — design reports and documentation.
 
-There is **no Vivado project, build script, or testbench checked in yet**. Synthesis is done through Vivado 2023.2 (GUI or tcl); the RTL + the two SRAM IP cores in `open-la500-master/IP/` are the inputs you assemble into a project.
+Key files checked in: `cpu_project/cpu_project.xpr`, `soc/scripts/build.tcl`, and `soc/sim/tb_soc_generic.v`.
 
 ## Hard contest constraints (from `Description.md`)
 
@@ -40,7 +41,7 @@ The core is a classic single-issue **static 5-stage pipeline**. Stage modules an
 Top level and supporting modules:
 - `mycpu_top.v` — **top module `core_top`**; wires all stages, caches, tlb, csr, axi_bridge together. External interface is **AXI3** (read/write channels) plus a debug port. This is the synthesis top.
 - `lacc_core.v` (module `core_top`'s neighbor) — top of the optional LaCC coprocessor; wraps `lacc_demo.v`.
-- `icache.v` / `dcache.v` — 2-way set-associative caches; random (LFSR) replacement. dcache adds dirty-bit + write-buffer state machine. **Each file also defines behavioral `data_bank_sram`/`tagv_sram` modules at the bottom, guarded by `` `ifdef SIMU ``** (see macros below).
+- `icache.v` / `dcache.v` — 2-way set-associative caches; random (LFSR) replacement. dcache adds dirty-bit + write-buffer state machine. The behavioral `data_bank_sram`/`tagv_sram` models are defined in `soc/rtl/core/dcache.v` at the bottom, guarded by `` `ifdef SIMU `` (see macros below).
 - `tlb_entry.v` / `addr_trans.v` — 32-entry fully-associative TLB (CAM), shared by I/D with two query ports; virtual→physical translation.
 - `csr.v` / `csr.h` — control/status registers; `csr.h` holds all CSR bit-field and exception-code (`ECODE_*`) macros.
 - `btb.v` — branch prediction: 32-entry BTB (CAM) + 8-entry RAS. Correct prediction removes the fetch bubble; misprediction is corrected in `ds`.
@@ -50,21 +51,21 @@ Top level and supporting modules:
 
 Pipeline handshake protocol (see `doc/设计概述.md`): every stage uses `stage_valid` / `stage_ready_go` / `stage_allowin` / `stage_to_nextstage_valid`. A stall propagates backward by deasserting `allowin`. When changing pipeline timing, preserve this contract.
 
-## Compile-time macros (in `mycpu.h`, both commented out by default)
+## Compile-time macros (in `soc/rtl/core/mycpu.h`)
 
-- **`` `define SIMU ``** — selects **behavioral SRAM models** (defined inside `dcache.v`) for simulation. In this SoC `mycpu.h` defines `SIMU` permanently; Vivado infers the reg-array templates as Block RAM, so the Xilinx SRAM IP (`IP/data_bank_sram.xcix` / `tagv_sram.xcix`) is optional. The simulation flows below pass `-d SIMU` explicitly.
-- **`` `define HAS_LACC ``** — enables the **LaCC** (LoongArch32R Custom Coprocessor Interface), a hook for adding custom instructions (opcode `1100`). Touching it changes inter-stage bus widths (`DS_TO_ES_BUS_WD` grows) and adds `` `ifdef HAS_LACC `` paths through `id_stage.v`/`exe_stage.v`/`mycpu_top.v`. Interface and how-to-add-an-instruction are in `doc/lacc接口.md`. Leave off unless intentionally extending the ISA.
+- **`` `define SIMU ``** — permanently defined in `soc/rtl/core/mycpu.h`. It selects the **behavioral SRAM models** (defined inside `dcache.v`) for simulation. In synthesis Vivado infers the reg-array templates as Block RAM, so the Xilinx SRAM IP (`IP/data_bank_sram.xcix` / `tagv_sram.xcix`) is optional. The Vivado `xsim` script passes `-d SIMU` explicitly; the Verilator generic harness relies on the `define` in `mycpu.h`.
+- **`` `define HAS_LACC ``** — the only optional macro. It enables the **LaCC** (LoongArch32R Custom Coprocessor Interface), a hook for adding custom instructions (opcode `1100`). Touching it changes inter-stage bus widths (`DS_TO_ES_BUS_WD` grows) and adds `` `ifdef HAS_LACC `` paths through `id_stage.v`/`exe_stage.v`/`mycpu_top.v`. Interface and how-to-add-an-instruction are in `doc/lacc接口.md`. Leave off unless intentionally extending the ISA.
 
 ## Non-FPGA simulation flows
 
 Run from the `soc/` directory.
 
-### Verilator functional test (`tb_func_fast`)
+### Verilator functional test (`tb_soc_generic`)
 
 Use the captured script:
 
 ```bash
-bash build/run_verilator_func_fast.sh
+bash build/run_verilator_generic.sh
 ```
 
 Manual equivalent (MSYS2/Windows, Verilator 5.x):
@@ -74,13 +75,13 @@ export TMP=$(cygpath -m "$TMP")
 export TEMP=$(cygpath -m "$TEMP")
 export TMPDIR=$(cygpath -m "${TMPDIR:-$TMP}")
 /c/Strawberry/perl/bin/perl.exe /c/App/verilator-install/bin/verilator \
-  --main --timing +incdir+rtl/core -f build/func_fast_files.f -Wno-fatal -Mdir obj_dir_func_fast
-mingw32-make -C obj_dir_func_fast -f Vtb_func_fast.mk \
+  --main --timing +incdir+rtl/core -f build/generic_files.f -Wno-fatal -Mdir obj_dir_generic
+mingw32-make -C obj_dir_generic -f Vtb_soc_generic.mk \
   CFG_CXXFLAGS_PCH_I=-include CFG_CXXFLAGS_COROUTINES=-fcoroutines
-./obj_dir_func_fast/Vtb_func_fast.exe
+./obj_dir_generic/Vtb_soc_generic.exe
 ```
 
-Expected result: `PASS tb_func_fast` with `num_data=0x3a00003a`, `led_rg0=01`, `led_rg1=01`.
+Expected result: `PASS tb_soc_generic` with `num_data=0x3a00003a`, `led_rg0=01`, `led_rg1=01`.
 
 ### Vivado behavioral simulation (`xsim`)
 
@@ -125,11 +126,11 @@ Reports are written to `soc/sw/tests/reports/run-<timestamp>.json`.
 
 ## Documentation
 
-`open-la500-master/doc/` contains the original Chinese design report — the best source for design intent:
-- `前言.md` — overview (single-issue 5-stage, 2-way caches, 32-entry TLB, BTB+RAS, AXI3, ~50MHz on FPGA, taped out on SMIC 180nm).
-- `设计概述.md` — detailed per-stage walkthrough and the pipeline handshake protocol.
-- `分支预测.md` — BTB/RAS design.
-- `lacc接口.md` — LaCC coprocessor interface spec.
+The design report and RTL source are the best sources for design intent:
+- `docs/design_report.md` — overview (single-issue 5-stage, 2-way caches, 32-entry TLB, BTB+RAS, AXI3, ~50MHz on FPGA, taped out on SMIC 180nm).
+- `soc/rtl/core/*.v` — detailed per-stage walkthrough and the pipeline handshake protocol.
+- `soc/rtl/core/btb.v` — BTB/RAS design.
+- `doc/lacc接口.md` — LaCC coprocessor interface spec.
 
 ## Working notes
 

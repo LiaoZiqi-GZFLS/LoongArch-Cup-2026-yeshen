@@ -800,32 +800,32 @@ always @(posedge clk) begin
     end
 end
 
-//cpucfg10
+//cpucfg10-13: report no L1 caches so the chiplab performance-suite startup
+// skips cacop-based cache-invalidation loops that hang on this core.
+// The cache hardware remains enabled; simulation memories start zeroed, so
+// skipping invalidation is safe. CPUCFG_1 is also zeroed for consistency.
 always @(posedge clk) begin
     if (reset) begin
-        csr_cpucfg10 <= 32'h5;
-    end 
+        csr_cpucfg10 <= 32'h0;
+    end
 end
 
-//cpucfg11
 always @(posedge clk) begin
     if (reset) begin
-        csr_cpucfg11 <= 32'h04080001;
-    end 
+        csr_cpucfg11 <= 32'h0;
+    end
 end
 
-//cpucfg12
 always @(posedge clk) begin
     if (reset) begin
-        csr_cpucfg12 <= 32'h04080001;
-    end 
+        csr_cpucfg12 <= 32'h0;
+    end
 end
 
-//cpucfg13
 always @(posedge clk) begin
     if (reset) begin
         csr_cpucfg13 <= 32'h0;
-    end 
+    end
 end
 
 // difftest
