@@ -121,6 +121,57 @@ module tb_soc_generic #(
                $time, ws_pc, ws_excp_num, ws_error_va);
   end
 
+  // ID-stage INE diagnostic: the WB-stage PC is several bubbles away from
+  // the actual decoded instruction, so capture ds_pc/ds_inst here.
+  wire        id_excp_ine   = dut.u_core.id_stage.excp_ine;
+  wire        id_valid      = dut.u_core.id_stage.ds_valid;
+  wire [31:0] id_pc         = dut.u_core.id_stage.ds_pc;
+  wire [31:0] id_inst       = dut.u_core.id_stage.ds_inst;
+  wire        id_inst_valid = dut.u_core.id_stage.inst_valid;
+  reg         id_excp_ine_d;
+  always @(posedge aclk) id_excp_ine_d <= id_excp_ine;
+  always @(posedge aclk) if (aresetn && id_excp_ine && id_valid && !id_excp_ine_d) begin
+    if (enable_diag != 0)
+      $display("[%0t] INE at id_pc=%08x id_inst=%08x inst_valid=%b",
+               $time, id_pc, id_inst, id_inst_valid);
+  end
+
+  // Detailed fetch-path snapshot around the bitcount sbrk target.
+  // This is temporary instrumentation for the 0x1c004edc INE investigation.
+  wire [31:0] if_nextpc     = dut.u_core.if_stage.nextpc;
+  wire [31:0] if_fs_pc      = dut.u_core.if_stage.fs_pc;
+  wire        if_fs_valid   = dut.u_core.if_stage.fs_valid;
+  wire        if_inst_valid = dut.u_core.if_stage.inst_valid;
+  wire        if_addr_ok    = dut.u_core.if_stage.inst_addr_ok;
+  wire        if_data_ok    = dut.u_core.if_stage.inst_data_ok;
+  wire [31:0] if_rdata      = dut.u_core.if_stage.inst_rdata;
+  wire        if_buff_en    = dut.u_core.if_stage.inst_buff_enable;
+  wire [31:0] if_buff_data  = dut.u_core.if_stage.inst_rd_buff;
+  wire [31:0] ic_rdata      = dut.u_core.icache.rdata;
+  wire        ic_data_ok    = dut.u_core.icache.data_ok;
+  wire        ic_addr_ok    = dut.u_core.icache.addr_ok;
+  wire [4:0]  ic_state      = dut.u_core.icache.main_state;
+  wire [19:0] ic_req_tag    = dut.u_core.icache.request_buffer_tag;
+  wire [7:0]  ic_req_idx    = dut.u_core.icache.request_buffer_index;
+  wire [3:0]  ic_req_off    = dut.u_core.icache.request_buffer_offset;
+  wire [1:0]  ic_way_hit    = dut.u_core.icache.way_hit;
+  wire        ic_cache_hit  = dut.u_core.icache.cache_hit;
+  wire [31:0] ic_rd_addr    = dut.u_core.icache.rd_addr;
+  wire        fs2ds_valid   = dut.u_core.if_stage.fs_to_ds_valid;
+  always @(posedge aclk) begin
+    if (aresetn && enable_diag != 0 &&
+        ((if_nextpc >= 32'h1c004ed0 && if_nextpc <= 32'h1c004ef0) ||
+         (id_pc    >= 32'h1c004ed0 && id_pc    <= 32'h1c004ef0))) begin
+      $display("[%0t] FETCH nextpc=%08x fs=%08x fv=%b iv=%b aok=%b dok=%b rdata=%08x buff=%b/%08x | IC st=%b req=%08x/%03x/%x hit=%b/%b ic_rdata=%08x ic_dok=%b ic_aok=%b rd_addr=%08x | AR araddr=%08x arvalid=%b | ID pc=%08x inst=%08x v=%b fs2ds=%b",
+               $time, if_nextpc, if_fs_pc, if_fs_valid, if_inst_valid,
+               if_addr_ok, if_data_ok, if_rdata, if_buff_en, if_buff_data,
+               ic_state, ic_req_tag, ic_req_idx, ic_req_off,
+               ic_way_hit, ic_cache_hit, ic_rdata, ic_data_ok, ic_addr_ok, ic_rd_addr,
+               dut.araddr, dut.arvalid,
+               id_pc, id_inst, id_valid, fs2ds_valid);
+    end
+  end
+
   // Periodic PC dump
   always @(posedge aclk) if (aresetn) begin
     if (cyc[19:0] == 20'd0) begin  // every 1M cycles

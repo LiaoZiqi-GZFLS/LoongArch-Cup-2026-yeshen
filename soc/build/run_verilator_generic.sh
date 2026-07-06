@@ -5,8 +5,23 @@ set -euo pipefail
 # resolved against the caller's working directory.
 workdir="$1"
 wrapper="$2"
-workdir_abs=$(realpath "$workdir")
-wrapper_abs=$(realpath "$wrapper")
+
+# Portable absolute-path resolution (realpath/readlink -f are not available
+# in every Windows bash distribution).  Accepts both POSIX (/foo) and
+# Windows-drive (E:/foo) absolute paths.
+abs_path() {
+    local p="$1"
+    if [[ "$p" =~ ^[A-Za-z]:/ ]]; then
+        echo "$p"
+    elif [[ "$p" = /* ]]; then
+        echo "$p"
+    else
+        echo "$(pwd)/$p"
+    fi
+}
+
+workdir_abs=$(abs_path "$workdir")
+wrapper_abs=$(abs_path "$wrapper")
 TOPNAME=$(basename "$wrapper" .v)
 
 cd "$(dirname "$0")/.."

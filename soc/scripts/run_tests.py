@@ -7,7 +7,9 @@ executes the selected simulator, and writes a JSON report.
 
 import argparse
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -37,6 +39,23 @@ def repo_root() -> Path:
 def to_posix(path: Path) -> str:
     """Return an absolute POSIX-style path string for MSYS2/bash subprocesses."""
     return path.resolve().as_posix()
+
+
+def find_bash() -> str | None:
+    """Locate a usable bash.exe on Windows; returns None on other platforms."""
+    if sys.platform != "win32":
+        return None
+    path = shutil.which("bash")
+    if path:
+        return path
+    for candidate in (
+        r"C:\msys64\usr\bin\bash.exe",
+        r"C:\Program Files\Git\usr\bin\bash.exe",
+        r"C:\Program Files\Git\bin\bash.exe",
+    ):
+        if os.path.isfile(candidate):
+            return candidate
+    return None
 
 
 def parse_const(s: str) -> int:
@@ -119,11 +138,16 @@ def flatten_tests(manifest: dict[str, Any]) -> list[dict[str, Any]]:
 def select_tests(
     items: list[dict[str, Any]], category: str, names: list[str] | None
 ) -> list[dict[str, Any]]:
-    """Select tests by category and optional name list."""
-    if category != "all":
-        items = [t for t in items if t.get("category") == category]
+    """Select tests by category and optional name list.
+
+    If explicit test names are given, they take precedence and the category
+    filter is ignored so that a single -t argument can target any test.
+    """
     if names:
-        items = [t for t in items if t.get("name") in names]
+        wanted = set(names)
+        return [t for t in items if t.get("name") in wanted]
+    if category != "all":
+        return [t for t in items if t.get("category") == category]
     return items
 
 
@@ -239,7 +263,13 @@ def run_verilator(
             "num_data": None,
         }
 
-    cmd = [to_posix(script), to_posix(workdir), to_posix(wrapper)]
+    # On Windows, .sh files are not executable directly; run through bash.
+    bash = find_bash()
+    if bash:
+        cmd = [bash, to_posix(script), to_posix(workdir), to_posix(wrapper)]
+    else:
+        cmd = [to_posix(script), to_posix(workdir), to_posix(wrapper)]
+
     returncode, log, elapsed = _run_subprocess(cmd)
     return parse_result(returncode, log, elapsed)
 
