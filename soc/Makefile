@@ -15,7 +15,7 @@ help:
 	@echo "  make report       - run full regression under Verilator"
 	@echo "  make summary      - print CI status from latest report"
 	@echo "  make clean-mem    - remove generated soc/sw/tests/*.mem"
-	@echo "  make clean-reports- remove generated reports"
+	@echo "  make clean-reports - remove generated reports"
 	@echo "  make clean        - remove .mem files and reports"
 
 build:
