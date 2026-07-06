@@ -94,19 +94,12 @@ def generate_wrapper(workdir: Path, test: dict[str, Any], mem_file: Path) -> Pat
     if "led_rg1" in expect:
         params.append(("EXPECT_LED_RG1", vfmt_int(parse_const(expect["led_rg1"]), 2)))
 
-    params.append(
-        (
-            "REQUIRE_NUM_DATA_NONZERO",
-            "1'b1" if expect.get("num_data_nonzero") else "1'b0",
-        )
-    )
+    if expect.get("num_data_nonzero"):
+        params.append(("REQUIRE_NUM_DATA_NONZERO", "1'b1"))
 
     if test.get("category") == "performance":
         params.append(("ENABLE_DIAG", "1'b1"))
         params.append(("DUMP_HANG", "1'b1"))
-    else:
-        params.append(("ENABLE_DIAG", "1'b0"))
-        params.append(("DUMP_HANG", "1'b0"))
 
     param_lines = ",\n    ".join(f".{name}({value})" for name, value in params)
 
