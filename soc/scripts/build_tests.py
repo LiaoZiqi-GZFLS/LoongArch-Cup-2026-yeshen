@@ -10,8 +10,11 @@ Reads soc/scripts/test_manifest.yaml and, for every entry:
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 import yaml
@@ -21,6 +24,50 @@ REPO = Path(__file__).resolve().parents[2]  # soc/scripts -> soc -> repo root
 SOC = REPO / "soc"
 BIN2MEM = SOC / "sw" / "bin2mem.py"
 MANIFEST = SOC / "scripts" / "test_manifest.yaml"
+
+
+@contextmanager
+def resolved_make_cmd_and_env():
+    """Yield the make command list and an optional env dict for Windows.
+
+    If `make` is already on PATH, yield ``(["make"], None)`` unchanged.
+    Otherwise, if `mingw32-make` is available, create a temporary shim
+    directory containing a `make` executable that points to
+    `mingw32-make`, prepend it to PATH, and yield ``([<shim_path>],
+    env)``.  The shim directory is removed when the context exits.
+
+    The returned command uses a full path to the shim so that the
+    top-level subprocess invocation succeeds even when Python's
+    Windows PATH resolution with a replaced ``env`` is unreliable.
+    Recursive Makefiles that call ``make`` still benefit from the
+    prepended PATH.
+    """
+    make_cmd = shutil.which("make")
+    if make_cmd:
+        yield ["make"], None
+        return
+
+    mingw_make = shutil.which("mingw32-make")
+    if not mingw_make:
+        raise RuntimeError(
+            "Neither 'make' nor 'mingw32-make' was found on PATH. "
+            "Please install GNU Make (e.g., via MSYS2 or MinGW-w64)."
+        )
+
+    shim_dir = tempfile.mkdtemp(prefix="build_tests_make_")
+    try:
+        shim_name = "make.exe" if sys.platform == "win32" else "make"
+        shim_path = os.path.join(shim_dir, shim_name)
+        try:
+            os.symlink(mingw_make, shim_path)
+        except OSError:
+            shutil.copy(mingw_make, shim_path)
+
+        env = os.environ.copy()
+        env["PATH"] = shim_dir + os.pathsep + env["PATH"]
+        yield [shim_path], env
+    finally:
+        shutil.rmtree(shim_dir, ignore_errors=True)
 
 
 def load_manifest():
@@ -40,7 +87,7 @@ def load_manifest():
     return items, data.get("settings", {})
 
 
-def build_one(entry, output_dir: Path, jobs: int):
+def build_one(entry, output_dir: Path, jobs: int, make_cmd, env):
     if not BIN2MEM.exists():
         raise FileNotFoundError(f"bin2mem helper not found: {BIN2MEM}")
 
@@ -53,14 +100,14 @@ def build_one(entry, output_dir: Path, jobs: int):
     if not build_dir.exists():
         raise FileNotFoundError(f"build_dir not found: {build_dir}")
 
-    cmd = ["make", f"-C", str(build_dir)]
+    cmd = make_cmd + ["-C", str(build_dir)]
     if jobs > 1:
         cmd.append(f"-j{jobs}")
     if target:
         cmd.append(target)
 
     print(f"[build] {' '.join(cmd)}")
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True, env=env)
 
     if not artifact.exists():
         raise FileNotFoundError(f"build artifact not found: {artifact}")
@@ -92,14 +139,15 @@ def main():
 
     wanted = set(args.tests) if args.tests else None
     failed = []
-    for item in items:
-        if wanted and item["name"] not in wanted:
-            continue
-        try:
-            build_one(item, output_dir, args.jobs)
-        except Exception as e:
-            print(f"[FAIL] {item['name']}: {e}", file=sys.stderr)
-            failed.append(item["name"])
+    with resolved_make_cmd_and_env() as (make_cmd, env):
+        for item in items:
+            if wanted and item["name"] not in wanted:
+                continue
+            try:
+                build_one(item, output_dir, args.jobs, make_cmd, env)
+            except Exception as e:
+                print(f"[FAIL] {item['name']}: {e}", file=sys.stderr)
+                failed.append(item["name"])
 
     if failed:
         print(f"\n{len(failed)} build(s) failed: {', '.join(failed)}", file=sys.stderr)
