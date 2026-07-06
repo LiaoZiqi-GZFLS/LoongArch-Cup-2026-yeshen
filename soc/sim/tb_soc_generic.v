@@ -52,11 +52,11 @@ module tb_soc_generic #(
     timeout_cycles           = TIMEOUT_CYCLES;
     stable_cycles            = STABLE_CYCLES;
     expect_num_data          = EXPECT_NUM_DATA;
-    expect_led_rg0           = EXPECT_LED_RG0;
-    expect_led_rg1           = EXPECT_LED_RG1;
-    require_num_data_nonzero = REQUIRE_NUM_DATA_NONZERO;
-    enable_diag              = ENABLE_DIAG;
-    dump_hang                = DUMP_HANG;
+    expect_led_rg0           = {{30{1'b0}}, EXPECT_LED_RG0};
+    expect_led_rg1           = {{30{1'b0}}, EXPECT_LED_RG1};
+    require_num_data_nonzero = {31'b0, REQUIRE_NUM_DATA_NONZERO};
+    enable_diag              = {31'b0, ENABLE_DIAG};
+    dump_hang                = {31'b0, DUMP_HANG};
 
     $value$plusargs("TIMEOUT_CYCLES=%d", timeout_cycles);
     $value$plusargs("STABLE_CYCLES=%d",  stable_cycles);
@@ -70,6 +70,7 @@ module tb_soc_generic #(
 
   reg [31:0] num_prev = 32'h0;
   reg [31:0] num_stable = 32'd0;
+  reg        test_done = 1'b0;
 
   always @(posedge aclk) if (aresetn) begin
     if (num_data !== num_prev) begin
@@ -94,9 +95,9 @@ module tb_soc_generic #(
       else begin
         if (expect_num_data !== 32'h0 && num_data !== expect_num_data[31:0])
           pass_ok = 1'b0;
-        if (expect_led_rg0 !== 2'b00 && led_rg0 !== expect_led_rg0[1:0])
+        if (expect_led_rg0[1:0] !== 2'b00 && led_rg0 !== expect_led_rg0[1:0])
           pass_ok = 1'b0;
-        if (expect_led_rg1 !== 2'b00 && led_rg1 !== expect_led_rg1[1:0])
+        if (expect_led_rg1[1:0] !== 2'b00 && led_rg1 !== expect_led_rg1[1:0])
           pass_ok = 1'b0;
       end
     end
@@ -170,7 +171,8 @@ module tb_soc_generic #(
   initial begin
     repeat (RESET_CYCLES) @(negedge aclk);
     aresetn = 1;
-    for (cyc=0; cyc<timeout_cycles; cyc=cyc+1) begin
+    test_done = 1'b0;
+    for (cyc=0; cyc<timeout_cycles && !test_done; cyc=cyc+1) begin
       @(negedge aclk);
       if (num_data !== 32'h0 && num_stable >= stable_cycles) begin
         $display("program reached steady state at cyc=%0d", cyc);
@@ -180,11 +182,12 @@ module tb_soc_generic #(
         else
           $display("FAIL tb_soc_generic: num_data=0x%08x led_rg0=%b led_rg1=%b",
                    num_data, led_rg0, led_rg1);
-        $finish;
+        test_done = 1'b1;
       end
     end
-    $display("TIMEOUT tb_soc_generic at cyc=%0d", cyc);
-    if (dump_hang != 0) begin
+    if (!test_done)
+      $display("TIMEOUT tb_soc_generic at cyc=%0d", cyc);
+    if (dump_hang != 0 && !test_done) begin
       $display("final num_data=0x%08x led=%04x led_rg0=%b led_rg1=%b",
                num_data, led, led_rg0, led_rg1);
       $display("final IF/nextpc=%08x fs=%08x ds=%08x es=%08x ms=%08x ws=%08x",
