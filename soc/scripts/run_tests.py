@@ -26,9 +26,17 @@ except ImportError:
     sys.exit(1)
 
 
+REQUIRED_TEST_KEYS = ("name", "mem_name", "timeout_cycles", "stable_cycles")
+
+
 def repo_root() -> Path:
     """Return repository root computed from this script's location."""
     return Path(__file__).resolve().parents[2]
+
+
+def to_posix(path: Path) -> str:
+    """Return an absolute POSIX-style path string for MSYS2/bash subprocesses."""
+    return path.resolve().as_posix()
 
 
 def parse_const(s: str) -> int:
@@ -42,8 +50,58 @@ def parse_const(s: str) -> int:
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+    """Load and validate the test manifest."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        print(f"Error parsing manifest {path}:\n{e}", file=sys.stderr)
+        sys.exit(1)
+    except OSError as e:
+        print(f"Error reading manifest {path}:\n{e}", file=sys.stderr)
+        sys.exit(1)
+
+    if not isinstance(data, dict):
+        print(f"Error: manifest root must be a mapping ({path})", file=sys.stderr)
+        sys.exit(1)
+
+    for category in ("functional", "performance"):
+        entries = data.get(category) or []
+        if not isinstance(entries, list):
+            print(
+                f"Error: manifest category '{category}' must be a list",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        for idx, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                print(
+                    f"Error: {category}[{idx}] is not a mapping",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            missing = [k for k in REQUIRED_TEST_KEYS if k not in entry]
+            if missing:
+                name = entry.get("name", f"{category}[{idx}]")
+                print(
+                    f"Error: test '{name}' missing required keys: {missing}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            # Validate expect constants early so malformed values fail fast.
+            expect = entry.get("expect") or {}
+            for key in ("num_data", "led_rg0", "led_rg1"):
+                if key in expect:
+                    try:
+                        parse_const(expect[key])
+                    except ValueError as e:
+                        print(
+                            f"Error: test '{entry['name']}' expect.{key} "
+                            f"is not a valid constant: {expect[key]} ({e})",
+                            file=sys.stderr,
+                        )
+                        sys.exit(1)
+
     return data
 
 
@@ -119,14 +177,14 @@ endmodule
 
 def parse_result(returncode: int, log: str, elapsed: float) -> dict[str, Any]:
     """Infer PASS/FAIL/TIMEOUT from the simulator log."""
-    status = "FAIL"
-    if re.search(r"\bPASS\b", log, re.IGNORECASE):
+    # A non-zero simulator exit code is always a failure, regardless of log text.
+    if returncode != 0:
+        status = "FAIL"
+    elif re.search(r"\bPASS\b", log, re.IGNORECASE):
         status = "PASS"
     elif re.search(r"\bTIMEOUT\b", log, re.IGNORECASE):
         status = "TIMEOUT"
-    elif re.search(r"\bFAIL\b", log, re.IGNORECASE):
-        status = "FAIL"
-    elif returncode != 0:
+    else:
         status = "FAIL"
 
     num_data: int | None = None
@@ -142,54 +200,87 @@ def parse_result(returncode: int, log: str, elapsed: float) -> dict[str, Any]:
     }
 
 
+def _run_subprocess(cmd: list[str]) -> tuple[int, str, float]:
+    """Run a command, returning (returncode, combined_output, elapsed_sec)."""
+    start = time.perf_counter()
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, PermissionError, OSError) as e:
+        return (
+            -1,
+            f"Failed to launch subprocess: {' '.join(cmd)}\n{e}",
+            0.0,
+        )
+    except subprocess.TimeoutExpired as e:
+        return (
+            -1,
+            f"Subprocess timed out: {' '.join(cmd)}\n{e}",
+            time.perf_counter() - start,
+        )
+    elapsed = time.perf_counter() - start
+    return proc.returncode, proc.stdout + proc.stderr, elapsed
+
+
 def run_verilator(
     test: dict[str, Any], mem_file: Path, workdir: Path
 ) -> dict[str, Any]:
     """Run the generic Verilator flow for a single test."""
     wrapper = generate_wrapper(workdir, test, mem_file)
     script = repo_root() / "soc" / "build" / "run_verilator_generic.sh"
-    start = time.perf_counter()
-    proc = subprocess.run(
-        [str(script), str(workdir), str(wrapper)],
-        capture_output=True,
-        text=True,
-    )
-    elapsed = time.perf_counter() - start
-    log = proc.stdout + proc.stderr
-    return parse_result(proc.returncode, log, elapsed)
+    if not script.exists():
+        return {
+            "status": "FAIL",
+            "log": f"Verilator harness script not found: {script}",
+            "elapsed_sec": 0.0,
+            "num_data": None,
+        }
+
+    cmd = [to_posix(script), to_posix(workdir), to_posix(wrapper)]
+    returncode, log, elapsed = _run_subprocess(cmd)
+    return parse_result(returncode, log, elapsed)
 
 
 def run_xsim(test: dict[str, Any], mem_file: Path, workdir: Path) -> dict[str, Any]:
     """Run the generic Vivado xsim flow for a single test."""
     wrapper = generate_wrapper(workdir, test, mem_file)
     script = repo_root() / "soc" / "build" / "xsim_generic.tcl"
+    if not script.exists():
+        return {
+            "status": "FAIL",
+            "log": f"xsim harness script not found: {script}",
+            "elapsed_sec": 0.0,
+            "num_data": None,
+        }
+
+    # The testbench clock period is 10 ns. Multiply timeout_cycles by 12 to
+    # give a small margin beyond the Verilog timeout.
     run_ns = test["timeout_cycles"] * 12
-    start = time.perf_counter()
-    proc = subprocess.run(
-        [
-            "vivado",
-            "-mode",
-            "batch",
-            "-source",
-            str(script),
-            "-tclargs",
-            str(wrapper),
-            str(run_ns),
-            str(workdir),
-        ],
-        capture_output=True,
-        text=True,
-    )
-    elapsed = time.perf_counter() - start
-    log = proc.stdout + proc.stderr
-    return parse_result(proc.returncode, log, elapsed)
+    cmd = [
+        "vivado",
+        "-mode",
+        "batch",
+        "-source",
+        to_posix(script),
+        "-tclargs",
+        to_posix(wrapper),
+        str(run_ns),
+        to_posix(workdir),
+    ]
+    returncode, log, elapsed = _run_subprocess(cmd)
+    return parse_result(returncode, log, elapsed)
 
 
-def run_one(test: dict[str, Any], simulator: str) -> dict[str, Any]:
+def run_one(
+    test: dict[str, Any],
+    simulator: str,
+    settings: dict[str, Any],
+) -> dict[str, Any]:
     """Prepare, execute, and log one test."""
     root = repo_root()
-    manifest = load_manifest(root / "soc" / "scripts" / "test_manifest.yaml")
-    settings = manifest.get("settings", {})
     mem_output_dir = root / settings.get("mem_output_dir", "soc/sw/tests")
 
     mem_file = mem_output_dir / f"{test['mem_name']}.mem"
@@ -263,8 +354,8 @@ def main(argv: list[str] | None = None) -> int:
         "-s",
         "--simulator",
         choices=["verilator", "xsim"],
-        default="verilator",
-        help="Simulator backend (default: verilator).",
+        default=None,
+        help="Simulator backend (default: manifest default_simulator or verilator).",
     )
     parser.add_argument(
         "-o",
@@ -293,7 +384,7 @@ def main(argv: list[str] | None = None) -> int:
     for test in selected:
         name = test["name"]
         print(f"\n=== Running {name} ({test['category']}) with {simulator} ===")
-        result = run_one(test, simulator)
+        result = run_one(test, simulator, settings)
         result["name"] = name
         result["category"] = test["category"]
         result["simulator"] = simulator
