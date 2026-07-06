@@ -1,6 +1,7 @@
 # soc/Makefile -- top-level convenience wrapper for chiplab test integration.
-REPO_ROOT := $(shell cd .. && pwd)
-SOC       := $(REPO_ROOT)/soc
+SOC := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
+REPO_ROOT := $(realpath $(SOC)/..)
+PYTHON ?= python
 
 .PHONY: help build build-func build-perf run-func run-perf run-all clean-mem report summary clean-reports clean
 
@@ -19,31 +20,31 @@ help:
 	@echo "  make clean        - remove .mem files and reports"
 
 build:
-	python $(SOC)/scripts/build_tests.py -j 4
+	$(PYTHON) $(SOC)/scripts/build_tests.py -j 4
 
 build-func:
-	python $(SOC)/scripts/build_tests.py -j 4 -t nscscc_func
+	$(PYTHON) $(SOC)/scripts/build_tests.py -j 4 -t nscscc_func
 
 build-perf:
-	python $(SOC)/scripts/build_tests.py -j 4 -t \
+	$(PYTHON) $(SOC)/scripts/build_tests.py -j 4 -t \
 	  bitcount bubble_sort coremark crc32 dhrystone quick_sort select_sort \
 	  sha stream_copy stringsearch fireye_A0 fireye_B2 fireye_C0 fireye_D1 \
 	  fireye_I2 inner_product lookup_table loop_induction my_memcmp minmax_sequence
 
 run-func: build-func
-	python $(SOC)/scripts/run_tests.py -t nscscc_func
+	$(PYTHON) $(SOC)/scripts/run_tests.py -t nscscc_func
 
 run-perf: build-perf
-	python $(SOC)/scripts/run_tests.py -c performance
+	$(PYTHON) $(SOC)/scripts/run_tests.py -c performance
 
 run-all: build
-	python $(SOC)/scripts/run_tests.py -c all
+	$(PYTHON) $(SOC)/scripts/run_tests.py -c all
 
 report:
-	@python $(SOC)/scripts/run_tests.py -c all -s verilator
+	@$(PYTHON) $(SOC)/scripts/run_tests.py -c all -s verilator
 
 summary:
-	@python $(SOC)/scripts/summarize_report.py
+	@$(PYTHON) $(SOC)/scripts/summarize_report.py
 
 clean-mem:
 	rm -f $(SOC)/sw/tests/*.mem

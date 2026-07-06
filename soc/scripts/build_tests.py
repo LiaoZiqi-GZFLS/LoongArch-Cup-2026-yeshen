@@ -29,12 +29,21 @@ def load_manifest():
     items = []
     for category in ("functional", "performance"):
         for entry in data.get(category, []):
-            entry["category"] = category
-            items.append(entry)
+            item = {**entry, "category": category}
+            required = ("name", "build_dir", "output_artifact", "mem_name")
+            missing = [key for key in required if key not in item]
+            if missing:
+                raise ValueError(
+                    f"manifest entry missing required key(s) {missing!r}: {item}"
+                )
+            items.append(item)
     return items, data.get("settings", {})
 
 
 def build_one(entry, output_dir: Path, jobs: int):
+    if not BIN2MEM.exists():
+        raise FileNotFoundError(f"bin2mem helper not found: {BIN2MEM}")
+
     build_dir = REPO / entry["build_dir"]
     target = entry.get("build_target") or ""
     artifact = REPO / entry["output_artifact"]
@@ -76,7 +85,10 @@ def main():
     args = parser.parse_args()
 
     items, settings = load_manifest()
-    output_dir = Path(args.output_dir) if args.output_dir else SOC / settings.get("mem_output_dir", "sw/tests")
+    if args.output_dir:
+        output_dir = (REPO / args.output_dir).resolve()
+    else:
+        output_dir = SOC / settings.get("mem_output_dir", "sw/tests")
 
     wanted = set(args.tests) if args.tests else None
     failed = []
