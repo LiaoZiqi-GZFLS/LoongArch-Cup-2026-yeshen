@@ -92,6 +92,37 @@ Expected result: `PASS tb_func_fast` at around 5.3 ms.
 
 Note: the openLA500 RTL contains many registers without reset values. Vivado xsim is a 4-state simulator and previously failed to boot because the cache tag/data SRAM output buffers were uninitialized (`X`), making the cache-hit signal `X` and stalling the pipeline. The behavioral SRAM models in `dcache.v` now have `initial` blocks that zero the arrays and output buffers when `SIMU` is defined. This does not affect Verilator (2-state, already defaults to 0) or synthesis (the `SIMU` guard).
 
+## ChipLab regression commands
+
+All commands are run from the `soc/` directory.
+
+```bash
+make run-func       # build + run nscscc_func (Verilator)
+make run-perf       # build + run all 20 performance benchmarks
+make run-all        # build + run functional + performance tests
+make summary        # one-line status from the latest JSON report
+```
+
+To run under Vivado xsim:
+
+```bash
+python scripts/run_tests.py -t nscscc_func -s xsim
+```
+
+To build images without running:
+
+```bash
+make build          # all tests
+make build-func     # only nscscc_func
+make build-perf     # all 20 performance benchmarks
+make clean-mem      # remove generated .mem files
+make clean-reports  # remove generated reports
+make clean          # remove .mem files and reports
+python scripts/build_tests.py -t bitcount coremark
+```
+
+Reports are written to `soc/sw/tests/reports/run-<timestamp>.json`.
+
 ## Documentation
 
 `open-la500-master/doc/` contains the original Chinese design report — the best source for design intent:
