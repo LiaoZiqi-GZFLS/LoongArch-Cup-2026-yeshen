@@ -57,6 +57,18 @@ set_property top fpga_top [get_filesets sources_1]
 # of the synth run directory; the file is also added to the project for visibility.
 # To synthesize a BLANK BRAM instead, set: set demo_mem ""
 set demo_mem [file normalize "$soc/sw/demo.mem"]
+
+# Optional test-image override: any .mem file passed as a Tcl argument wins over
+# the default demo.mem (e.g. to preload a specific chiplab test image into the
+# bitstream BRAM).  Both "-tclargs bit /abs/path/to/test.mem" and a positional
+# fourth argument are accepted.
+foreach arg $argv {
+    if {[file extension $arg] eq ".mem" && [file exists $arg]} {
+        set demo_mem [file normalize $arg]
+        break
+    }
+}
+
 if {$demo_mem ne "" && [file exists $demo_mem]} {
     add_files -norecurse -fileset sources_1 $demo_mem
     set_property generic "INIT_FILE=\"$demo_mem\"" [get_filesets sources_1]

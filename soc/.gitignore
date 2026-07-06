@@ -1,5 +1,7 @@
 build/*
 !build/*.sh
+!build/generic_files.f
+!build/xsim_generic.tcl
 *.vvp
 *.vcd
 *.wdb
