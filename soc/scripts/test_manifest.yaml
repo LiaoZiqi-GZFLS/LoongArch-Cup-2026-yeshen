@@ -1,0 +1,199 @@
+# soc/scripts/test_manifest.yaml
+functional:
+  - name: nscscc_func
+    build_dir: chiplab/software/examples/nscscc_func
+    build_target: ""
+    output_artifact: chiplab/software/examples/nscscc_func/obj/main.bin
+    mem_name: func
+    expect:
+      num_data: "0x3a00003a"
+      led_rg0: "0b01"
+      led_rg1: "0b01"
+    timeout_cycles: 10_000_000
+    stable_cycles: 100_000
+
+performance:
+  - name: bitcount
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: bitcount
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/bitcount/inst_data.bin
+    mem_name: perf_bitcount
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: bubble_sort
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: bubble_sort
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/bubble_sort/inst_data.bin
+    mem_name: perf_bubble_sort
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: coremark
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: coremark
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/coremark/inst_data.bin
+    mem_name: perf_coremark
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: crc32
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: crc32
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/crc32/inst_data.bin
+    mem_name: perf_crc32
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: dhrystone
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: dhrystone
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/dhrystone/inst_data.bin
+    mem_name: perf_dhrystone
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: quick_sort
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: quick_sort
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/quick_sort/inst_data.bin
+    mem_name: perf_quick_sort
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: select_sort
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: select_sort
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/select_sort/inst_data.bin
+    mem_name: perf_select_sort
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: sha
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: sha
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/sha/inst_data.bin
+    mem_name: perf_sha
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: stream_copy
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: stream_copy
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/stream_copy/inst_data.bin
+    mem_name: perf_stream_copy
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: stringsearch
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: stringsearch
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/stringsearch/inst_data.bin
+    mem_name: perf_stringsearch
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: fireye_A0
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: fireye_A0
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/fireye_A0/inst_data.bin
+    mem_name: perf_fireye_A0
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: fireye_B2
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: fireye_B2
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/fireye_B2/inst_data.bin
+    mem_name: perf_fireye_B2
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: fireye_C0
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: fireye_C0
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/fireye_C0/inst_data.bin
+    mem_name: perf_fireye_C0
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: fireye_D1
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: fireye_D1
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/fireye_D1/inst_data.bin
+    mem_name: perf_fireye_D1
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: fireye_I2
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: fireye_I2
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/fireye_I2/inst_data.bin
+    mem_name: perf_fireye_I2
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: inner_product
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: inner_product
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/inner_product/inst_data.bin
+    mem_name: perf_inner_product
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: lookup_table
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: lookup_table
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/lookup_table/inst_data.bin
+    mem_name: perf_lookup_table
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: loop_induction
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: loop_induction
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/loop_induction/inst_data.bin
+    mem_name: perf_loop_induction
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: my_memcmp
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: my_memcmp
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/my_memcmp/inst_data.bin
+    mem_name: perf_my_memcmp
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+  - name: minmax_sequence
+    build_dir: chiplab/software/examples/nscscc_perf
+    build_target: minmax_sequence
+    output_artifact: chiplab/software/examples/nscscc_perf/obj/minmax_sequence/inst_data.bin
+    mem_name: perf_minmax_sequence
+    expect:
+      num_data_nonzero: true
+    timeout_cycles: 500_000_000
+    stable_cycles: 100_000
+
+settings:
+  mem_output_dir: soc/sw/tests
+  default_simulator: verilator
