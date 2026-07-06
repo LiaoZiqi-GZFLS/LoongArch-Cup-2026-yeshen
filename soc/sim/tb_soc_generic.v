@@ -1,12 +1,15 @@
 `timescale 1ns/1ps
 // Generic SoC testbench.  Per-test wrappers set INIT_FILE and the pass/fail
-// criteria.  Optional diagnostics (exception trap, periodic PC dump, hang
-// detector, AXI R-beat trace) are gated by ENABLE_DIAG and are modelled on
-// the legacy soc/sim/tb_perf_fast.v diagnostics block.
+// criteria.  Progress messages and optional diagnostics (exception trap,
+// periodic PC dump, hang detector, AXI R-beat trace) are gated by ENABLE_DIAG;
+// PASS/FAIL/TIMEOUT and hang dumps are always printed.  Runtime plusarg
+// overrides use decimal format (%d).  Diagnostics are modelled on the legacy
+// soc/sim/tb_perf_fast.v diagnostics block.
 module tb_soc_generic #(
     parameter INIT_FILE                  = "",
     parameter TIMEOUT_CYCLES             = 10_000_000,
     parameter STABLE_CYCLES              = 100_000,
+    parameter RESET_CYCLES               = 4,
     parameter EXPECT_NUM_DATA            = 32'h0,        // 0 -> don't care
     parameter EXPECT_LED_RG0             = 2'b00,        // 00 -> don't care
     parameter EXPECT_LED_RG1             = 2'b00,        // 00 -> don't care
@@ -67,12 +70,12 @@ module tb_soc_generic #(
 
   reg [31:0] num_prev = 32'h0;
   reg [31:0] num_stable = 32'd0;
-  reg        done = 1'b0;
 
   always @(posedge aclk) if (aresetn) begin
     if (num_data !== num_prev) begin
-      $display("[%0t] num_data <= 0x%08x  led=%04x led_rg0=%b led_rg1=%b",
-               $time, num_data, led, led_rg0, led_rg1);
+      if (enable_diag != 0)
+        $display("[%0t] num_data <= 0x%08x  led=%04x led_rg0=%b led_rg1=%b",
+                 $time, num_data, led, led_rg0, led_rg1);
       num_prev   <= num_data;
       num_stable <= 32'd0;
     end else begin
@@ -80,16 +83,23 @@ module tb_soc_generic #(
     end
   end
 
-  function automatic bit pass_ok();
-    if (require_num_data_nonzero != 0)
-      return (num_data !== 32'h0);
-    if (expect_num_data !== 32'h0 && num_data !== expect_num_data[31:0])
-      return 1'b0;
-    if (expect_led_rg0 !== 2'b00 && led_rg0 !== expect_led_rg0[1:0])
-      return 1'b0;
-    if (expect_led_rg1 !== 2'b00 && led_rg1 !== expect_led_rg1[1:0])
-      return 1'b0;
-    return 1'b1;
+  function reg pass_ok;
+    begin
+      pass_ok = 1'b1;
+      if (require_num_data_nonzero != 0) begin
+        // Reject both zero and unknown (X/Z) values.
+        if (num_data == 32'h0 || (^num_data) === 1'bx)
+          pass_ok = 1'b0;
+      end
+      else begin
+        if (expect_num_data !== 32'h0 && num_data !== expect_num_data[31:0])
+          pass_ok = 1'b0;
+        if (expect_led_rg0 !== 2'b00 && led_rg0 !== expect_led_rg0[1:0])
+          pass_ok = 1'b0;
+        if (expect_led_rg1 !== 2'b00 && led_rg1 !== expect_led_rg1[1:0])
+          pass_ok = 1'b0;
+      end
+    end
   endfunction
 
   // -----------------------------------------------------------------
@@ -139,7 +149,7 @@ module tb_soc_generic #(
       end else begin
         stuck_cnt <= stuck_cnt + 1;
       end
-      if (stuck_cnt > STABLE_CYCLES && !hang_dumped) begin
+      if (stuck_cnt >= stable_cycles && !hang_dumped) begin
         if (enable_diag != 0)
           $display("[%0t] HANG suspected: nextpc=%08x stuck for %0d cycles",
                    $time, stuck_pc, stuck_cnt);
@@ -158,7 +168,7 @@ module tb_soc_generic #(
   end
 
   initial begin
-    repeat (4) @(negedge aclk);
+    repeat (RESET_CYCLES) @(negedge aclk);
     aresetn = 1;
     for (cyc=0; cyc<timeout_cycles; cyc=cyc+1) begin
       @(negedge aclk);
@@ -170,7 +180,6 @@ module tb_soc_generic #(
         else
           $display("FAIL tb_soc_generic: num_data=0x%08x led_rg0=%b led_rg1=%b",
                    num_data, led_rg0, led_rg1);
-        done = 1'b1;
         $finish;
       end
     end
