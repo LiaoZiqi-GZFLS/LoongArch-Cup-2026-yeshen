@@ -153,11 +153,11 @@ def run_verilator(
     test: dict[str, Any], mem_file: Path, workdir: Path
 ) -> dict[str, Any]:
     """Run the generic Verilator flow for a single test."""
-    generate_wrapper(workdir, test, mem_file)
+    wrapper = generate_wrapper(workdir, test, mem_file)
     script = repo_root() / "soc" / "build" / "run_verilator_generic.sh"
     start = time.perf_counter()
     proc = subprocess.run(
-        [str(script), str(workdir), "tb_run.v"],
+        [str(script), str(workdir), str(wrapper)],
         capture_output=True,
         text=True,
     )
@@ -168,7 +168,7 @@ def run_verilator(
 
 def run_xsim(test: dict[str, Any], mem_file: Path, workdir: Path) -> dict[str, Any]:
     """Run the generic Vivado xsim flow for a single test."""
-    generate_wrapper(workdir, test, mem_file)
+    wrapper = generate_wrapper(workdir, test, mem_file)
     script = repo_root() / "soc" / "build" / "xsim_generic.tcl"
     run_ns = test["timeout_cycles"] * 12
     start = time.perf_counter()
@@ -180,7 +180,7 @@ def run_xsim(test: dict[str, Any], mem_file: Path, workdir: Path) -> dict[str, A
             "-source",
             str(script),
             "-tclargs",
-            "tb_run.v",
+            str(wrapper),
             str(run_ns),
             str(workdir),
         ],
