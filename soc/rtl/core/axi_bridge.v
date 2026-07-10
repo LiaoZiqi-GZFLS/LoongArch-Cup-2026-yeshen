@@ -90,10 +90,9 @@ assign  wid     = 4'b1;
 
 assign  inst_wr_rdy = 1'b1;
 
-localparam read_requst_empty = 1'b0;
-localparam read_requst_ready = 1'b1;
-localparam read_respond_empty = 1'b0;
-localparam read_respond_transfer = 1'b1;
+localparam RD_IDLE = 2'b00;
+localparam RD_AR   = 2'b01;
+localparam RD_RESP = 2'b10;
 localparam write_request_empty = 3'b000;
 localparam write_addr_ready = 3'b001;
 localparam write_data_ready = 3'b010;
@@ -102,16 +101,12 @@ localparam write_data_transform = 3'b100;
 localparam write_data_wait = 3'b101;
 localparam write_wait_b = 3'b110;
 
-reg       read_requst_state;
-reg       read_respond_state;
+reg [1:0] read_state;
 reg [2:0] write_requst_state;
 
 wire      write_wait_enable;
 
-wire         rd_requst_state_is_empty;
 wire         rd_requst_can_receive;
-
-assign rd_requst_state_is_empty = read_requst_state == read_requst_empty;
 
 wire        data_rd_cache_line;
 wire        inst_rd_cache_line;
@@ -130,7 +125,11 @@ wire        write_buffer_last;
 
 assign write_buffer_empty = (write_buffer_num == 3'b0) && !write_wait_enable;
 
-assign rd_requst_can_receive = rd_requst_state_is_empty && (read_respond_state == read_respond_empty) && !(write_wait_enable && !(bvalid && bready));
+// Do not accept a new read request until the previous read transaction has
+// completed (AR issued and R last received). Without this guard the icache can
+// enter refill while a stale response for an earlier transaction is still on
+// the R channel, causing a partial line fill and an INE exception.
+assign rd_requst_can_receive = (read_state == RD_IDLE) && !(write_wait_enable && !(bvalid && bready));
 
 assign data_rd_rdy = rd_requst_can_receive;
 assign inst_rd_rdy = !data_rd_req && rd_requst_can_receive;
@@ -162,89 +161,73 @@ assign write_buffer_last = write_buffer_num == 3'b1;
 
 always @(posedge clk) begin
     if (reset) begin
-        read_requst_state <= read_requst_empty;
-        arvalid <= 1'b0;
+        read_state <= RD_IDLE;
+        arvalid    <= 1'b0;
     end
-    else case (read_requst_state)
-        read_requst_empty: begin
+    else case (read_state)
+        RD_IDLE: begin
             if (data_rd_req) begin
                 if (write_wait_enable) begin
-                    if (bvalid && bready) begin   //when wait write back, stop send read request. easiest way.
-                        read_requst_state <= read_requst_ready;
-                        arid <= 4'b1;
-                        araddr <= data_rd_addr;
-                        arsize <= data_real_rd_size;
-                        arlen  <= data_real_rd_len;
+                    if (bvalid && bready) begin
+                        read_state <= RD_AR;
+                        arid    <= 4'b1;
+                        araddr  <= data_rd_addr;
+                        arsize  <= data_real_rd_size;
+                        arlen   <= data_real_rd_len;
                         arvalid <= 1'b1;
                     end
                 end
                 else begin
-                    read_requst_state <= read_requst_ready;
-                    arid <= 4'b1;
-                    araddr <= data_rd_addr;
-                    arsize <= data_real_rd_size;
-                    arlen  <= data_real_rd_len;
+                    read_state <= RD_AR;
+                    arid    <= 4'b1;
+                    araddr  <= data_rd_addr;
+                    arsize  <= data_real_rd_size;
+                    arlen   <= data_real_rd_len;
                     arvalid <= 1'b1;
                 end
             end
             else if (inst_rd_req) begin
                 if (write_wait_enable) begin
                     if (bvalid && bready) begin
-                        read_requst_state <= read_requst_ready;
-                        arid <= 4'b0;
-                        araddr <= inst_rd_addr;
-                        arsize <= inst_real_rd_size;
-                        arlen  <= inst_real_rd_len;
+                        read_state <= RD_AR;
+                        arid    <= 4'b0;
+                        araddr  <= inst_rd_addr;
+                        arsize  <= inst_real_rd_size;
+                        arlen   <= inst_real_rd_len;
                         arvalid <= 1'b1;
                     end
                 end
                 else begin
-                    read_requst_state <= read_requst_ready;
-                    arid <= 4'b0;
-                    araddr <= inst_rd_addr;
-                    arsize <= inst_real_rd_size;
-                    arlen  <= inst_real_rd_len;
+                    read_state <= RD_AR;
+                    arid    <= 4'b0;
+                    araddr  <= inst_rd_addr;
+                    arsize  <= inst_real_rd_size;
+                    arlen   <= inst_real_rd_len;
                     arvalid <= 1'b1;
                 end
             end
         end
-        read_requst_ready: begin
-            if (arready && arid[0]) begin
-                read_requst_state <= read_requst_empty;
+        RD_AR: begin
+            if (arready) begin
                 arvalid <= 1'b0;
+                // The response for this read may have already completed
+                // (e.g. because arready was delayed by the decoder). In that
+                // case return directly to IDLE so the next read can start.
+                if (rvalid && rready && rlast)
+                    read_state <= RD_IDLE;
+                else
+                    read_state <= RD_RESP;
             end
-            else if (arready && !arid[0]) begin 
-                read_requst_state <= read_requst_empty;
-                arvalid <= 1'b0;
+        end
+        RD_RESP: begin
+            if (rvalid && rready && rlast) begin
+                read_state <= RD_IDLE;
             end
         end
     endcase
 end
 
-always @(posedge clk) begin
-    if (reset) begin
-        read_respond_state <= read_respond_empty;
-        rready <= 1'b1;
-    end
-    else case (read_respond_state)
-        read_respond_empty: begin
-            if (rvalid && rready) begin
-                if (rlast) begin
-                    // Single-beat response: the slave may deassert rvalid
-                    // immediately, so do not enter transfer state.
-                    read_respond_state <= read_respond_empty;
-                end else begin
-                    read_respond_state <= read_respond_transfer;
-                end
-            end
-        end
-        read_respond_transfer: begin
-            if (rlast && rvalid) begin
-                read_respond_state <= read_respond_empty;
-            end
-        end
-    endcase
-end
+assign rready = 1'b1;
 
 always @(posedge clk) begin
     if (reset) begin
