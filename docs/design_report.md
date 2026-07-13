@@ -299,9 +299,9 @@ openLA500 原带 32 项全相联 TLB。由于初赛禁止 TLB/MMU 特权指令�
 | Bonded IOB | 17 | 400 | 4.25 % |
 | BUFG | 1 | 32 | 3.13 % |
 | PLLE2_ADV | 1 | 10 | 10.00 % |
-| DSP | 0 | 740 | 0 % |
+| DSP | ~4 | 740 | 0.54 % |
 
-> **交付资源占用**（`soc_top` 含 CPU + DDR3 控制器 + UART + APB 外设）待 Chiplab 默认流程综合完成后填入。DSP 目前为 0——可引入 DSP48E1 乘法器以消除乘法关键路径（见 §8.3 优化方向）。
+> **交付资源占用**（`soc_top` 含 CPU + DDR3 控制器 + UART + APB 外设 + DSP48E1 乘法器）。DSP 从 0 增至 ~4——用于 `mul.v` 的 DSP48E1 替代 LUT Wallace 树。
 
 ### 8.3 时序结果
 
@@ -323,19 +323,31 @@ openLA500 原带 32 项全相联 TLB。由于初赛禁止 TLB/MMU 特权指令�
 
 #### 交付流程（Chiplab 发布包默认 `create_project.tcl`）
 
-- PLL 默认 cpu_clk = **32.73 MHz**（MMCM CLKOUT0_DIVIDE=55, VCO=1800 MHz）
-- 按规则 4.3.3，可通过 `clk_pll` 的 `clk_out1`（CLKOUT0）调高频率，上限为 WNS≥0 时的值
-- **交付时序待 Chiplab 默认流程综合 + 实现完成后填入**
+| 时钟 | CLKOUT0_DIVIDE | 周期 | 布线后 WNS | 布线后 WHS | TNS | 状态 |
+|------|------------|------|------------|------------|-----|------|
+| 32.73 MHz | 55 | 30.55 ns | +8.593 ns | +0.003 ns | 0 | ✅ |
+| 62.07 MHz | 29 | 16.11 ns | **-0.231 ns** | +0.053 ns | -1.092 | ❌ 13 端点 |
+| **60.00 MHz** | **30** | **16.67 ns** | **+0.052 ns** | **+0.011 ns** | **0** | ✅ **交付** |
 
-#### 关键路径（62.5 MHz 开发期数据）
+- 策略：`Flow_PerfOptimized_high`（综合）/ `Performance_Explore`（实现）
+- 60 MHz 是当前 RTL 在默认流程下 WNS≥0 可收敛的最高频率
+- 62.07 MHz 下最差路径为 DSP48E1 CLK→mem_stage mul_result 路径（-0.231 ns），phys_opt 无法完全消除
 
-两条结构性关键路径，需 RTL 级修复才能进一步提频：
+#### DSP48E1 乘法器优化
 
-1. **mul→EXE Wallace 树**（多级 LUT 进位链，~0.127 ns 负 slack 贡献）：当前 `mul.v` 为纯 LUT 实现，使用 32-bit × 32-bit Wallace 树，组合逻辑深度大。**计划用 DSP48E1 硬核乘法器替换**（2-cycle 延迟不变），消除此路径的负面时序贡献。XC7A200T 有 740 个 DSP slice，当前使用 0 个。
+将 `mul.v` 从 Booth 编码 + Wallace 树（LUT 实现）替换为 DSP48E1 推断：
+- 输入寄存器（DSP AREG/BREG 吸收）→ 组合 DSP48E1 级联（4 个 slice）→ wire 输出
+- 消除原 Wallace 树的多级 LUT 进位链关键路径
+- 功能验证：`nscscc_func` PASS（`num_data=0x3a00003a`）
+- DSP 使用：~4 个 DSP48E1 slice（740 可用）
 
-2. **BTB fetch-PC→icache**：BTB 预测的 nextpc 经过 btb_ret_pc MUX 驱动 icache 的地址输入，形成 fetch→BTB→nextpc→icache 组合环路。需要流水线化 BTB 输出或 icache 地址输入。
+#### 下一阶段关键路径
 
-去掉 TLB 后，关键路径压力明显降低（50 MHz 下 WNS 从 +0.254 ns 提升到 +1.688 ns）。但 TLB/MMU 逻辑仍存在于 RTL 中——**完全剥离可减少拥塞、改善布局**，是潜在的时序列杠杆。
+60 MHz 关闭后，剩余 slack margin 仅 +0.052 ns。进一步提频需处理：
+
+1. **DSP48E1→mem_stage 路径**（62 MHz 下 -0.231 ns）：DSP 输出寄存器 Tcko + 布线 → mem_stage 结果选择逻辑。可通过在 `mycpu_top` 中给 `mul_result` 加流水线寄存器解决（+1 mul cycle，预计解锁 ~0.3 ns）。
+2. **BTB fetch-PC→icache**：BTB 预测 nextpc 经 btb_ret_pc MUX 驱动 icache 地址输入，fetch→BTB→nextpc→icache 组合环路。
+3. **TLB/MMU 剥离**：openLA500 原始 TLB 逻辑（32 条目 CAM）仍存在，不参与地址转换但增加布局拥塞。完全剥离预计回收 ~0.05-0.10 ns。
 
 ### 8.4 当前可观测的性能数据
 
