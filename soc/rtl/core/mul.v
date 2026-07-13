@@ -8,6 +8,11 @@
 // Latency: 1 cycle (same as original), matching the dep_need_stall=1 contract
 // in exe_stage.v.
 //
+// Architecture: combinational DSP multiply → output register (PREG).
+// This breaks the DSP CLK→fabric→destination critical path by using the
+// DSP48E1's internal output register (PREG), whose Tcko is ~0.3 ns vs.
+// 2-3 ns for the combinational multiply→fabric route.
+//
 // XC7A200T has 740 DSP48E1 slices; this uses ~4 of them per 32×32 multiply.
 //-----------------------------------------------------------------------------
 
@@ -17,35 +22,11 @@ module mul(
     input              mul_signed,
     input      [31:0]  x,
     input      [31:0]  y,
-    output     [63:0]  result
+    output reg [63:0]  result
 );
 
 //-----------------------------------------------------------------
-// Stage 0: input registers (matches original Booth-register position)
-//
-// The original mul registers Booth-encoded partial products, then
-// runs Wallace tree + final adder combinationally to the output.
-// We register the raw operands instead, then let DSP48E1 hard macros
-// produce the result combinationally – same 1-cycle latency, but the
-// slow LUT Wallace tree becomes a fast DSP48E1 cascade.
-//-----------------------------------------------------------------
-reg [31:0] x_r, y_r;
-reg        mul_signed_r;
-
-always @(posedge mul_clk) begin
-    if (reset) begin
-        x_r          <= 32'h0;
-        y_r          <= 32'h0;
-        mul_signed_r <= 1'b0;
-    end else begin
-        x_r          <= x;
-        y_r          <= y;
-        mul_signed_r <= mul_signed;
-    end
-end
-
-//-----------------------------------------------------------------
-// Stage 1: combinational DSP multiply (infers DSP48E1 cascade)
+// Stage 0: combinational DSP multiply (infers DSP48E1 cascade)
 //
 // In Verilog-2001, a × b yields max(width(a),width(b)) bits.
 // To capture the full 64-bit product of two 32-bit numbers we must
@@ -56,10 +37,27 @@ end
 // Unsigned: {32'b0, x}         ×  {32'b0, y}
 //-----------------------------------------------------------------
 wire [63:0] x_ext, y_ext;
+wire [63:0] product_comb;
 
-assign x_ext = mul_signed_r ? {{32{x_r[31]}}, x_r} : {32'b0, x_r};
-assign y_ext = mul_signed_r ? {{32{y_r[31]}}, y_r} : {32'b0, y_r};
+assign x_ext = mul_signed ? {{32{x[31]}}, x} : {32'b0, x};
+assign y_ext = mul_signed ? {{32{y[31]}}, y} : {32'b0, y};
 
-(* mult_style = "dsp" *) assign result = x_ext * y_ext;
+(* mult_style = "dsp" *) assign product_comb = x_ext * y_ext;
+
+//-----------------------------------------------------------------
+// Stage 1: output register (matches original 1-cycle latency)
+//
+// The original mul registers Booth partial products, then runs
+// Wallace tree + final adder combinationally to the output.
+// We register the final product instead — same 1-cycle latency,
+// but the DSP48E1's PREG Tcko is far smaller than the fabric
+// clock-to-output + Wallace + adder path.
+//-----------------------------------------------------------------
+always @(posedge mul_clk) begin
+    if (reset)
+        result <= 64'h0;
+    else
+        result <= product_comb;
+end
 
 endmodule
