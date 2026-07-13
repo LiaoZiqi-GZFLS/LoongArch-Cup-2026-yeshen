@@ -151,6 +151,10 @@ reg [4:0] main_state;
 reg       write_buffer_state;
 
 reg       rd_req_buffer;
+reg       prefetch_active;     // next-line prefetch in progress
+wire [27:0] next_line_addr;    // {tag, index} + 1 for prefetch
+
+assign next_line_addr = {request_buffer_tag, request_buffer_index} + 28'h1;
 
 // wire      invalid_way;
 
@@ -178,6 +182,7 @@ always @(posedge clk) begin
         miss_buffer_replace_way <= 2'b0;
 
 		wr_req <= 1'b0;
+		prefetch_active <= 1'b0;
     end
     else case (main_state)
         main_idle: begin
@@ -194,6 +199,7 @@ always @(posedge clk) begin
 
                 request_buffer_cacop_op_mode <= cacop_op_mode ;
                 request_buffer_dcacop        <= dcacop_op_en  ;
+                prefetch_active <= 1'b0;
             end
         end
         main_lookup: begin
@@ -210,9 +216,11 @@ always @(posedge clk) begin
 
                 request_buffer_cacop_op_mode <= cacop_op_mode ;
                 request_buffer_dcacop        <= dcacop_op_en  ;
+                prefetch_active <= 1'b0;
             end
             else if (cancel_req) begin
                 main_state <= main_idle;
+                prefetch_active <= 1'b0;
             end
             else if (!cache_hit) begin
 				//uncache wr --> wr_req 1
@@ -248,7 +256,21 @@ always @(posedge clk) begin
         end
         main_refill: begin
             if ((ret_valid && ret_last) || !rd_req_buffer) begin   //when rd_req is not set, go to next state directly
-                main_state <= main_idle;
+                // Next-line prefetch: after a load miss refill, prefetch the next cache line
+                if (!request_buffer_op && !request_buffer_uncache_en && !request_buffer_dcacop && !request_buffer_preld && !prefetch_active) begin
+                    prefetch_active <= 1'b1;
+                    {request_buffer_tag, request_buffer_index} <= next_line_addr;
+                    request_buffer_offset <= 4'b0;
+                    request_buffer_op <= 1'b0;
+                    request_buffer_uncache_en <= 1'b0;
+                    request_buffer_dcacop <= 1'b0;
+                    request_buffer_preld <= 1'b0;
+                    request_buffer_wstrb <= 4'b0;
+                    main_state <= main_lookup;
+                end else begin
+                    prefetch_active <= 1'b0;
+                    main_state <= main_idle;
+                end
             end
             else begin
                 if (ret_valid) begin
