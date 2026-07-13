@@ -72,11 +72,55 @@
 
 | 测试 | 平台 | 结果 |
 |------|------|------|
-| `nscscc_func` (func.mem) | Verilator 5.x (2-state) | ✅ PASS `num_data=0x3a00003a` |
+| `nscscc_func` (func.mem, 预编译) | Verilator 5.x | ✅ PASS `num_data=0x3a00003a` |
+| `nscscc_func` (源码构建) | WSL + 工具链 → Verilator | ✅ PASS `num_data=0x3a00003a` |
 | 基准 (Booth+Wallace mul) | Verilator | ✅ PASS `num_data=0x3a00003a` |
 | DSP48E1 mul 输出匹配 | 逐位比对 | ✅ 与基准完全一致 |
 
-> **阻塞**：LA32R 交叉编译工具链 (`loongarch32r-linux-gnusf-*`) 未安装，无法运行 `make run-func` / `make run-perf` 进行 20 个性能测试的完整回归。当前仅通过预编译 `sw/func.mem` 做冒烟验证。
+### 5.1 LA32R 交叉编译工具链
+
+- **来源**：`gitee.com/loongson-edu/la32r-toolchains` → `loongson-gnu-toolchain-8.3-x86_64-loongarch32r-linux-gnusf-v2.0.tar.xz`
+- **安装路径**：`chiplab/toolchains/loongson-gnu-toolchain-8.3-x86_64-loongarch32r-linux-gnusf-v2.0/`
+- **执行环境**：WSL (Ubuntu 20.04) — 工具链为 Linux ELF 二进制，无法在 Windows/MSYS2 中直接运行
+- **已验证**：GCC 8.3.0, GNU assembler 2.31.1, LoongArch GNU toolchain LA32 v2.0 (20230903)
+- **构建流程**：`wsl bash → make -C chiplab/.../nscscc_func → .mem → Verilator (Windows)`
+
+## 6. 性能测试基线（待更新）
+
+> ⚠️ 以下数据来自 worktree `chiplab-integration` 分支的双发射版本（2026-07-07）。当前 main 分支为单发射 + DSP48E1 乘法器，周期数将更高（无双发射 IPC 增益）。需在 Verilator 上重跑全部 20 个 perf 测试更新基线。
+
+### 6.1 历史基线（双发射版本，仅供参照）
+
+| 测试 | 状态 | 周期数 | 周期数 (dec) |
+|------|------|--------|-------------|
+| bitcount | PASS | 0x0000868c | 34,444 |
+| bubble_sort | PASS | 0x00026f6c | 159,596 |
+| coremark | PASS | 0x00056607 | 353,799 |
+| crc32 | PASS | 0x0003eb66 | 256,870 |
+| dhrystone | PASS | 0x00001271 | 4,721 |
+| quick_sort | PASS | 0x00026a48 | 158,280 |
+| select_sort | PASS | 0x00019555 | 103,765 |
+| sha | PASS | 0x000336e3 | 210,659 |
+| stream_copy | PASS | 0x000035d3 | 13,779 |
+| stringsearch | PASS | 0x00004b33 | 19,251 |
+| fireye_A0 | PASS | 0x000e6816 | 944,150 |
+| fireye_B2 | PASS | 0x0000b973 | 47,475 |
+| fireye_C0 | PASS | 0x00025f7c | 155,516 |
+| fireye_D1 | PASS | 0x0003db2f | 252,719 |
+| fireye_I2 | PASS | 0x00054b3d | 346,941 |
+| inner_product | PASS | 0x0009167c | 595,580 |
+| lookup_table | PASS | 0x0002de4b | 187,979 |
+| loop_induction | PASS | 0x00094b05 | 607,941 |
+| my_memcmp | PASS | 0x00029f6a | 171,882 |
+| minmax_sequence | PASS | 0x00052b9f | 338,847 |
+
+### 6.2 当前单发射基线状态
+
+- **预编译 .mem 文件**：21 个（20 perf + func），来自 worktree 分支的旧构建
+- **func.mem 源码构建**：✅ 已验证（WSL + 工具链编译通过，Verilator PASS `0x3a00003a`）
+- **perf .mem 源码构建**：🚫 需要 picolibc（C 库），尚未安装
+- **Verilator 重测**：🔄 bitcount 运行中（~10 KHz 模拟速度，每个测试需 5-60 分钟）
+- **预计完成时间**：全 20 测试需约 2-3 小时（如批量后台执行）
 
 ---
 
