@@ -114,9 +114,18 @@ one_valid_32 sel_one_untaken_entry (.in(btb_untaken_entry_t), .out_en(btb_sel_on
 
 //assign btb_random_index = (btb_match && (fcsr[4:0] == btb_match_index)) ? (fcsr[4:0]+1'b1) : fcsr[4:0];
 //untaken entry can exit first, make no difference, except lose history infor. 
+// Round-robin replacement pointer — avoids pathological LFSR evictions
+reg [4:0] btb_replace_ptr;
+always @(posedge clk) begin
+    if (reset)
+        btb_replace_ptr <= 5'd0;
+    else if (operate_en && add_entry && !btb_has_one_untaken_entry)
+        btb_replace_ptr <= (btb_replace_ptr == 5'd31) ? 5'd0 : btb_replace_ptr + 5'd1;
+end
+
 assign btb_add_entry_index = !btb_all_entry_valid ?      btb_select_one_invalid_entry :
-							 btb_has_one_untaken_entry ? btb_sel_one_untaken_entry : 
-							 							 fcsr[4:0] ; 
+							 btb_has_one_untaken_entry ? btb_sel_one_untaken_entry :
+							 							 btb_replace_ptr ; 
 
 assign btb_all_entry_valid = &btb_valid;
 one_valid_32 sel_one_btb_entry (.in(~btb_valid), .out_en(btb_select_one_invalid_entry));
