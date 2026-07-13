@@ -19,7 +19,7 @@ module axi_bridge(
     input    [ 1:0] rresp,
     input           rlast,
     input           rvalid,
-    output   reg    rready,
+    output          rready,
 
     output      [ 3:0] awid,
     output   reg[31:0] awaddr,

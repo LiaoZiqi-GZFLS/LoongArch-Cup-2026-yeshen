@@ -9,12 +9,18 @@
 
 ## 1. 摘要
 
-本作品实现了一套面向 2026 年龙芯杯团体赛初赛的**裸机片上系统（SoC）**，运行 LoongArch32-Reduced（LA32R）基准指令子集，无需操作系统。系统以 openLA500 单发射五级流水线核为基础，针对比赛约束做了两项关键适配：
+本作品实现了一套面向 2026 年龙芯杯团体赛初赛的**裸机片上系统（SoC）**，运行 LoongArch32-Reduced（LA32R）基准指令子集，无需操作系统。系统以 openLA500 单发射五级流水线核为基础，嵌入 Chiplab 发布包 `soc_demo` 顶层，通过 AXI3 接口对接 DDR3 主存及 APB 外设（UART、数码管、LED、拨码开关）。
 
-1. **去掉 TLB/MMU 虚拟内存机制**，改为直接地址（DA）模式，满足初赛“禁止实现 TLB/MMU 相关特权指令”的硬性要求；
-2. **统一主存改为 Block RAM 推断**，避免 Vivado 将其综合为 LUTRAM，保证 IMEM/DMEM 为片上 BRAM 且可扩展。
+主要优化点：
+1. **128-bit 缓存填充总线**：icache/dcache 一次 1 拍填满整条 cache line，减少指令/数据缺失停顿；
+2. **64 条目 BTB + 8 条目 RAS**：分支预测覆盖率和正确率提升，减少分支误预测冲刷；
+3. **AXI 读事务串行化**：修复多笔并发读导致的部分 icache 填充损坏问题；
+4. **`rdcnt` 改为退休指令计数**：使 coremark 等依赖 `rdcnt` 的基准程序正常运行；
+5. **片上 L1 缓存**：2 路组相联 icache/dcache，DDR3 主存延迟 ~10-20+ cycle 下缓存命中率直接决定 CPI。
 
-SoC 还集成了竞赛要求的全部外设：片上周期计数器、8 位七段数码管、CPU↔IO 互联。当前在 50 MHz 时钟下布线后时序完全满足（WNS +1.688 ns），片上资源占用约 6,240 LUT、4,516 FF、18 个 BRAM tile。
+当前开发期在自定义收敛辅助下于 **62.5 MHz** 布线后 WNS=+0.090 ns（`cpu_project` 独立验证）。交付频率以 Chiplab 默认流程 `create_project.tcl` 在 `soc_lite.xdc` 约束下的 WNS≥0 可收敛频率为准。
+
+> **注意**：openLA500 原生的 TLB/MMU 逻辑（32 条目全相联 TLB）**仍存在于 RTL 中**。初赛要求禁止实现 TLB/MMU 相关特权指令但不强制删除硬件——当前通过 CSR 配置（`CSR_CRMD_DA=1`）使其在直接地址模式下运行，不对功能测试产生影响。完全剥离 TLB 可减少逻辑拥塞、改善布局，是潜在的时序优化方向。
 
 ---
 
@@ -271,10 +277,17 @@ openLA500 原带 32 项全相联 TLB。由于初赛禁止 TLB/MMU 特权指令�
 
 - **FPGA**：Xilinx Artix-7 XC7A200T-FBG676-2
 - **Vivado**：2023.2
-- **综合脚本**：`soc/scripts/build.tcl`
-- **流程**：`vivado -mode batch -source soc/scripts/build.tcl -tclargs bit`
+- **开发期综合脚本**：`soc/scripts/build.tcl`（自定义收敛参数，含 `ExtraNetDelay_high`）
+- **交付流程**：Chiplab 发布包默认 `create_project.tcl`（规则 4.3.4 禁止修改综合/实现参数）
+  - 综合策略：`Flow_PerfOptimized_high`
+  - 实现策略：`Performance_Explore`
+  - 约束文件：`soc_lite.xdc`（禁止修改）
+- **开发期流程**：`vivado -mode batch -source soc/scripts/build.tcl -tclargs bit`
+- **交付流程**：在 `chiplab/fpga/nscscc-team/run_vivado/` 下运行 `vivado -mode batch -source create_project.tcl`，再 `launch_runs impl_1`
 
-### 8.2 资源占用（DA 模式 + BRAM 主存）
+### 8.2 资源占用
+
+开发期 `cpu_project` 独立综合（50 MHz，不含 chiplab SoC 外设）：
 
 | 资源 | 数量 | 可用 | 占比 |
 |------|------|------|------|
@@ -288,17 +301,41 @@ openLA500 原带 32 项全相联 TLB。由于初赛禁止 TLB/MMU 特权指令�
 | PLLE2_ADV | 1 | 10 | 10.00 % |
 | DSP | 0 | 740 | 0 % |
 
-其中 8 个 RAMB36E1 为统一主存，10 个 RAMB18E1 为 icache/dcache 的 data/tag RAM。
+> **交付资源占用**（`soc_top` 含 CPU + DDR3 控制器 + UART + APB 外设）待 Chiplab 默认流程综合完成后填入。DSP 目前为 0——可引入 DSP48E1 乘法器以消除乘法关键路径（见 §8.3 优化方向）。
 
 ### 8.3 时序结果
 
-- **工作时钟**：50 MHz（周期 20 ns）
-- **布线后 WNS**：+1.688 ns
-- **布线后 WHS**：+0.071 ns
-- **TNS / THS**：0
-- **理论最高频率**：约 55 MHz（以 setup 极限估算）
+#### 开发期（`soc/scripts/build.tcl`，含 `ExtraNetDelay_high`）
 
-去掉 TLB 后，关键路径压力明显降低，WNS 从 +0.254 ns 提升到 +1.688 ns。
+自定义收敛流程在 `cpu_project` 中独立验证，soc_top 顶层：
+
+| 时钟 | 周期 | 布线后 WNS | 布线后 WHS | 备注 |
+|------|------|------------|------------|------|
+| 50 MHz | 20 ns | +1.688 ns | +0.071 ns | 基准 |
+| 62.5 MHz | 16 ns | **+0.090 ns** | +0.029 ns | 当前锁定频率 |
+
+自定义收敛参数：
+- 综合后物理优化（`-directive Explore`）已启用
+- `ExtraNetDelay_high` 增加时序不确定性 margin（对交付不可见，见下文）
+- 综合策略 `Flow_PerfOptimized_high` / 实现策略 `Performance_Explore` 与交付流程一致
+
+> ⚠️ **`ExtraNetDelay_high` 是开发期诊断/收敛辅助参数，不是交付约束。** 它告诉 Vivado 在 setup 分析中预留额外悲观量，帮助在开发机上提前暴露潜在的关键路径。**该参数在 Chiplab 默认交付流程中不存在，也不能使用（规则 4.3.4）。** 交付时序以默认流程综合/实现结果为准。开发期用它找出的关键路径（如下所列）仍需 RTL 级修复才能保证交付时的 WNS≥0。
+
+#### 交付流程（Chiplab 发布包默认 `create_project.tcl`）
+
+- PLL 默认 cpu_clk = **32.73 MHz**（MMCM CLKOUT0_DIVIDE=55, VCO=1800 MHz）
+- 按规则 4.3.3，可通过 `clk_pll` 的 `clk_out1`（CLKOUT0）调高频率，上限为 WNS≥0 时的值
+- **交付时序待 Chiplab 默认流程综合 + 实现完成后填入**
+
+#### 关键路径（62.5 MHz 开发期数据）
+
+两条结构性关键路径，需 RTL 级修复才能进一步提频：
+
+1. **mul→EXE Wallace 树**（多级 LUT 进位链，~0.127 ns 负 slack 贡献）：当前 `mul.v` 为纯 LUT 实现，使用 32-bit × 32-bit Wallace 树，组合逻辑深度大。**计划用 DSP48E1 硬核乘法器替换**（2-cycle 延迟不变），消除此路径的负面时序贡献。XC7A200T 有 740 个 DSP slice，当前使用 0 个。
+
+2. **BTB fetch-PC→icache**：BTB 预测的 nextpc 经过 btb_ret_pc MUX 驱动 icache 的地址输入，形成 fetch→BTB→nextpc→icache 组合环路。需要流水线化 BTB 输出或 icache 地址输入。
+
+去掉 TLB 后，关键路径压力明显降低（50 MHz 下 WNS 从 +0.254 ns 提升到 +1.688 ns）。但 TLB/MMU 逻辑仍存在于 RTL 中——**完全剥离可减少拥塞、改善布局**，是潜在的时序列杠杆。
 
 ### 8.4 当前可观测的性能数据
 
