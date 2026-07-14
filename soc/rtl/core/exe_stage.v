@@ -109,6 +109,10 @@ wire        es_mul_enable  ;
 wire        div_stall      ;
 wire        mul_stall       ;   // mul takes 2 EXE cycles (DSP + output reg)
 reg         mul_cycle       ;   // 0 = first cycle, 1 = second cycle
+wire        alu_gr_we       ;   // ALU/CSR instruction that writes a register
+reg         alu_cycle       ;   // 0 = first cycle, 1 = second cycle
+wire        alu_stall       ;   // true on first EXE cycle for reg-writing ALU ops
+reg  [31:0] exe_result_r    ;   // pipelined result — breaks ALU→forwarding comb path
 wire        es_ll_w        ;
 wire        es_sc_w        ;
 wire        es_tlbsrch     ;
@@ -281,7 +285,7 @@ assign es_flush_sign  = excp_flush || ertn_flush || refetch_flush || icacop_flus
 
 assign icacop_inst_stall = icacop_op_en && !icache_unbusy;
 
-assign es_ready_go    = (!div_stall && !mul_stall &&
+assign es_ready_go    = (!div_stall && !mul_stall && !alu_stall &&
                         `ifdef HAS_LACC
                         !lacc_stall &&
                         `endif
@@ -325,6 +329,27 @@ always @(posedge clk) begin
 end
 assign mul_stall = es_valid && es_mul_enable && !mul_cycle;
 
+// ALU pipeline: all register-writing ALU/CSR instructions take 2 EXE cycles.
+// This allows exe_result_r to break the ALU→forwarding→ID combinational path.
+// Dependent instructions stall 1 extra cycle (handled by dep_need_stall below).
+assign alu_gr_we = es_gr_we && !es_load_op && !es_div_enable && !es_mul_enable;
+
+always @(posedge clk) begin
+    if (reset || es_flush_sign || !es_valid || !alu_gr_we)
+        alu_cycle <= 1'b0;
+    else
+        alu_cycle <= ~alu_cycle;
+end
+assign alu_stall = es_valid && alu_gr_we && !alu_cycle;
+
+// Pipeline register on ALU result — physically breaks long combinational path
+always @(posedge clk) begin
+    if (reset)
+        exe_result_r <= 32'h0;
+    else
+        exe_result_r <= exe_result;
+end
+
 `ifdef HAS_LACC
 assign lacc_stall       = es_lacc_req & ~lacc_rsp_valid;
 assign es_lacc_req      = es_lacc_req_pre & es_valid;
@@ -344,14 +369,14 @@ assign exe_result     = `ifdef HAS_LACC
                         `endif
                         es_res_from_csr ? es_csr_data : es_alu_result;
 
-//forward path
-assign dest_zero            = (es_dest == 5'b0); 
+//forward path — uses registered result to break ALU→ID combinational path
+assign dest_zero            = (es_dest == 5'b0);
 assign forward_enable       = es_gr_we & ~dest_zero & es_valid;
-assign dep_need_stall       = es_load_op | es_div_enable | es_mul_enable;
+assign dep_need_stall       = es_load_op | es_div_enable | es_mul_enable | alu_gr_we;
 assign es_to_ds_forward_bus = {dep_need_stall ,  //38:38
                                forward_enable ,  //37:37
                                es_dest        ,  //36:32
-                               exe_result         //31:0
+                               exe_result_r       //31:0  (registered — breaks timing)
                               };
 
 assign tlb_inst_stall = (es_tlbsrch || es_tlbrd) && es_valid;
