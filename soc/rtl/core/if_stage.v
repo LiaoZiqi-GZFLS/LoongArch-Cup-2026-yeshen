@@ -106,6 +106,17 @@ reg          idle_lock;
 
 wire         tlb_excp_lock_pc;
 
+// Pipeline registers on flush data buses — break WB→IF routing bottleneck.
+// csr_eentry/csr_era are stable during normal operation; ws_pc delayed 1 cycle
+// affects only rare flushes (1 wasted fetch, auto-corrected). Control signals
+// (excp_flush, ertn_flush, etc.) remain combinational for precise exceptions.
+reg [31:0] csr_eentry_r, csr_era_r, csr_tlbrentry_r;
+always @(posedge clk) begin
+    csr_eentry_r    <= csr_eentry;
+    csr_era_r       <= csr_era;
+    csr_tlbrentry_r <= csr_tlbrentry;
+end
+
 wire  [31:0] btb_ret_pc_t;
 wire  [ 4:0] btb_index_t;
 wire         btb_taken_t;
@@ -283,10 +294,10 @@ assign btb_en_t     = btb_lock_en || btb_en;
 assign pfs_ready_go = (inst_valid || pfs_excp) && inst_addr_ok;
 assign to_fs_valid  = ~reset && pfs_ready_go;
 assign seq_pc       = fs_pc + 32'h4;
-assign excp_entry   = {32{excp_tlbrefill}}  & csr_tlbrentry |
-                      {32{!excp_tlbrefill}} & csr_eentry    ;
+assign excp_entry   = {32{excp_tlbrefill}}  & csr_tlbrentry_r |
+                      {32{!excp_tlbrefill}} & csr_eentry_r    ;
 
-assign inst_flush_pc = {32{ertn_flush}}                                  & csr_era         |
+assign inst_flush_pc = {32{ertn_flush}}                                  & csr_era_r       |
                        {32{refetch_flush || icacop_flush || idle_flush}} & (ws_pc + 32'h4) ;
 
 assign nextpc = excp_flush_if                                                    ? excp_entry                :
