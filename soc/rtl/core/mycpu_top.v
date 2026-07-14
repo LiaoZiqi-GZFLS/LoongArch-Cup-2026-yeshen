@@ -601,6 +601,17 @@ mul u_mul(
     .result          (mul_result     )
     );
 
+// Output pipeline register breaks the DSP CLK→fabric→mem_stage critical path.
+// mul now takes 2 EXE cycles (mul_stall in exe_stage holds the instruction for
+// the second cycle so ms_dep_need_stall stays correct).
+reg [63:0] mul_result_r;
+always @(posedge aclk) begin
+    if (reset)
+        mul_result_r <= 64'h0;
+    else
+        mul_result_r <= mul_result;
+end
+
 `ifdef HAS_LACC
 lacc_core u_lacc_core(
     .clk             (aclk           ),
@@ -647,7 +658,7 @@ mem_stage mem_stage(
     //div mul
     .div_result           (div_result          ),
     .mod_result           (mod_result          ),
-    .mul_result           (mul_result          ),
+    .mul_result           (mul_result_r        ),
     //exception
     .excp_flush           (excp_flush          ),
     .ertn_flush           (ertn_flush          ),

@@ -107,6 +107,8 @@ wire [ 9:0] excp_num       ;
 wire        es_ertn        ;
 wire        es_mul_enable  ;
 wire        div_stall      ;
+wire        mul_stall       ;   // mul takes 2 EXE cycles (DSP + output reg)
+reg         mul_cycle       ;   // 0 = first cycle, 1 = second cycle
 wire        es_ll_w        ;
 wire        es_sc_w        ;
 wire        es_tlbsrch     ;
@@ -279,7 +281,7 @@ assign es_flush_sign  = excp_flush || ertn_flush || refetch_flush || icacop_flus
 
 assign icacop_inst_stall = icacop_op_en && !icache_unbusy;
 
-assign es_ready_go    = (!div_stall && 
+assign es_ready_go    = (!div_stall && !mul_stall &&
                         `ifdef HAS_LACC
                         !lacc_stall &&
                         `endif
@@ -311,6 +313,17 @@ assign es_div_enable = (es_mul_div_op[2] | es_mul_div_op[3]) & es_valid;
 assign es_mul_enable = es_mul_div_op[0] | es_mul_div_op[1];
 
 assign div_stall     = es_div_enable & ~div_complete;
+
+// mul takes 2 cycles in EXE: cycle 0 (issue operands) + cycle 1 (DSP result + output reg).
+// mul_cycle toggles every clock while a mul instruction is valid in EXE.
+// mul_stall = 1 on the FIRST cycle only; on the second cycle the instruction advances.
+always @(posedge clk) begin
+    if (reset || es_flush_sign || !es_valid || !es_mul_enable)
+        mul_cycle <= 1'b0;
+    else
+        mul_cycle <= ~mul_cycle;
+end
+assign mul_stall = es_valid && es_mul_enable && !mul_cycle;
 
 `ifdef HAS_LACC
 assign lacc_stall       = es_lacc_req & ~lacc_rsp_valid;
