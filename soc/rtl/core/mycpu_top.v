@@ -232,9 +232,22 @@ wire [ 3:0]  data_offset;
 wire [ 3:0]  data_wstrb;
 wire [31:0]  data_wdata;
 wire         data_addr_ok;  
-wire         data_data_ok;  
-wire [31:0]  data_rdata;    
-wire         data_rd_req;   
+wire         data_data_ok;
+wire [31:0]  data_rdata;
+// Pipeline registers on dcache→mem_stage interface — breaks the BRAM tag RAM
+// → WB excp_bus combinational path.  Adds 1 cycle to all load instructions.
+reg         data_data_ok_r;
+reg [31:0]  data_rdata_r;
+always @(posedge aclk) begin
+    if (reset) begin
+        data_data_ok_r <= 1'b0;
+        data_rdata_r   <= 32'h0;
+    end else begin
+        data_data_ok_r <= data_data_ok;
+        data_rdata_r   <= data_rdata;
+    end
+end
+wire         data_rd_req;
 wire [ 2:0]  data_rd_type;  
 wire [31:0]  data_rd_addr;  
 wire         data_rd_rdy;   
@@ -540,7 +553,7 @@ exe_stage exe_stage(
     .lacc_rsp_valid       (lacc_rsp_valid      ),
     .lacc_rsp_rdat        (lacc_rsp_rdat       ),
     .lacc_flush           (lacc_flush          ),
-    .data_data_ok         (data_data_ok        ),
+    .data_data_ok       (data_data_ok_r      ),
     .lacc_drsp_valid      (lacc_drsp_valid     ),
     .lacc_req_imm         (lacc_req_imm        ),
 `endif
@@ -635,7 +648,7 @@ lacc_core u_lacc_core(
     .lacc_data_size  (lacc_data_size  ),
 
     .lacc_drsp_valid (lacc_drsp_valid ),  
-    .lacc_drsp_rdata (data_rdata   )
+    .lacc_drsp_rdata (data_rdata_r  )
     );
 `endif
 
@@ -672,9 +685,9 @@ mem_stage mem_stage(
     .ms_wr_tlbehi         (ms_wr_tlbehi        ),
     .ms_flush             (ms_flush            ),
     //from cache
-    .data_data_ok         (data_data_ok        ),
+    .data_data_ok       (data_data_ok_r      ),
     .dcache_miss          (ms_dcache_miss      ),
-    .data_rdata           (data_rdata          ),
+    .data_rdata          (data_rdata_r         ),
     //to cache
     .data_uncache_en      (data_uncache_en     ),
     .tlb_excp_cancel_req  (data_tlb_excp_cancel_req),
