@@ -236,8 +236,8 @@ wire         data_data_ok;
 wire [31:0]  data_rdata;
 // Pipeline registers on dcache→mem_stage interface — breaks the BRAM tag RAM
 // → WB excp_bus combinational path.  Adds 1 cycle to all load instructions.
-reg         data_data_ok_r;
-reg [31:0]  data_rdata_r;
+(* retiming_forward = 1 *) reg         data_data_ok_r;
+(* retiming_forward = 1 *) reg [31:0]  data_rdata_r;
 always @(posedge aclk) begin
     if (reset) begin
         data_data_ok_r <= 1'b0;
@@ -617,7 +617,7 @@ mul u_mul(
 // Output pipeline register breaks the DSP CLK→fabric→mem_stage critical path.
 // mul now takes 2 EXE cycles (mul_stall in exe_stage holds the instruction for
 // the second cycle so ms_dep_need_stall stays correct).
-reg [63:0] mul_result_r;
+(* retiming_forward = 1 *) reg [63:0] mul_result_r;
 always @(posedge aclk) begin
     if (reset)
         mul_result_r <= 64'h0;

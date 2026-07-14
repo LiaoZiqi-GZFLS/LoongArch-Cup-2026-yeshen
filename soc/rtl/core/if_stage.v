@@ -110,7 +110,7 @@ wire         tlb_excp_lock_pc;
 // csr_eentry/csr_era are stable during normal operation; ws_pc delayed 1 cycle
 // affects only rare flushes (1 wasted fetch, auto-corrected). Control signals
 // (excp_flush, ertn_flush, etc.) remain combinational for precise exceptions.
-reg [31:0] csr_eentry_r, csr_era_r, csr_tlbrentry_r;
+(* retiming_forward = 1 *) reg [31:0] csr_eentry_r, csr_era_r, csr_tlbrentry_r;
 always @(posedge clk) begin
     csr_eentry_r    <= csr_eentry;
     csr_era_r       <= csr_era;

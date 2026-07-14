@@ -112,7 +112,7 @@ reg         mul_cycle       ;   // 0 = first cycle, 1 = second cycle
 wire        alu_gr_we       ;   // ALU/CSR instruction that writes a register
 reg         alu_cycle       ;   // 0 = first cycle, 1 = second cycle
 wire        alu_stall       ;   // true on first EXE cycle for reg-writing ALU ops
-reg  [31:0] exe_result_r    ;   // pipelined result — breaks ALU→forwarding comb path
+(* retiming_forward = 1 *) reg  [31:0] exe_result_r ;   // pipelined result — breaks ALU→forwarding comb path
 wire        es_ll_w        ;
 wire        es_sc_w        ;
 wire        es_tlbsrch     ;
