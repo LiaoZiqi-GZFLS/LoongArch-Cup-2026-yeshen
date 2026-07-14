@@ -973,20 +973,76 @@ always @(posedge clk) begin
     end
 end
 
-assign btb_operate_en    = ds_valid && ds_ready_go && es_allowin && !ds_excp;
-assign btb_operate_pc    = ds_pc;
-assign btb_pop_ras       = inst_jirl; 
-assign btb_push_ras      = inst_bl;
-assign btb_add_entry     = br_to_btb && !ds_btb_en && br_taken;
-assign btb_delete_entry  = !br_to_btb && ds_btb_en;
-assign btb_pre_error     = br_to_btb && ds_btb_en && (ds_btb_taken ^ br_taken);
-assign btb_target_error  = br_to_btb && ds_btb_en && (ds_btb_taken && br_taken) && (ds_btb_target != br_target);
-assign btb_pre_right     = br_to_btb && ds_btb_en && !(ds_btb_taken ^ br_taken);
-assign btb_right_orien   = br_taken;
-assign btb_right_target  = br_target;
-assign btb_operate_index = ds_btb_index;
+// BTB operate outputs — registered to break WB→IF→ID→BTB combinational path.
+// BTB updates are not timing-critical (affect prediction accuracy, not correctness).
+reg         btb_operate_en_r;
+reg [31:0]  btb_operate_pc_r;
+reg [ 4:0]  btb_operate_index_r;
+reg         btb_pop_ras_r;
+reg         btb_push_ras_r;
+reg         btb_add_entry_r;
+reg         btb_delete_entry_r;
+reg         btb_pre_error_r;
+reg         btb_pre_right_r;
+reg         btb_target_error_r;
+reg         btb_right_orien_r;
+reg [31:0]  btb_right_target_r;
 
-assign btb_pre_error_flush = (btb_add_entry || btb_delete_entry || btb_pre_error || btb_target_error) && ds_valid && ds_ready_go && !ds_excp;
+wire        btb_operate_en_w    = ds_valid && ds_ready_go && es_allowin && !ds_excp;
+wire        btb_pop_ras_w       = inst_jirl;
+wire        btb_push_ras_w      = inst_bl;
+wire        btb_add_entry_w     = br_to_btb && !ds_btb_en && br_taken;
+wire        btb_delete_entry_w  = !br_to_btb && ds_btb_en;
+wire        btb_pre_error_w     = br_to_btb && ds_btb_en && (ds_btb_taken ^ br_taken);
+wire        btb_target_error_w  = br_to_btb && ds_btb_en && (ds_btb_taken && br_taken) && (ds_btb_target != br_target);
+wire        btb_pre_right_w     = br_to_btb && ds_btb_en && !(ds_btb_taken ^ br_taken);
+wire        btb_right_orien_w   = br_taken;
+
+always @(posedge clk) begin
+    if (reset) begin
+        btb_operate_en_r    <= 1'b0;
+        btb_operate_pc_r    <= 32'h0;
+        btb_operate_index_r <= 5'h0;
+        btb_pop_ras_r       <= 1'b0;
+        btb_push_ras_r      <= 1'b0;
+        btb_add_entry_r     <= 1'b0;
+        btb_delete_entry_r  <= 1'b0;
+        btb_pre_error_r     <= 1'b0;
+        btb_pre_right_r     <= 1'b0;
+        btb_target_error_r  <= 1'b0;
+        btb_right_orien_r   <= 1'b0;
+        btb_right_target_r  <= 32'h0;
+    end else begin
+        btb_operate_en_r    <= btb_operate_en_w;
+        btb_operate_pc_r    <= ds_pc;
+        btb_operate_index_r <= ds_btb_index;
+        btb_pop_ras_r       <= btb_pop_ras_w;
+        btb_push_ras_r      <= btb_push_ras_w;
+        btb_add_entry_r     <= btb_add_entry_w;
+        btb_delete_entry_r  <= btb_delete_entry_w;
+        btb_pre_error_r     <= btb_pre_error_w;
+        btb_pre_right_r     <= btb_pre_right_w;
+        btb_target_error_r  <= btb_target_error_w;
+        btb_right_orien_r   <= btb_right_orien_w;
+        btb_right_target_r  <= br_target;
+    end
+end
+
+assign btb_operate_en    = btb_operate_en_r;
+assign btb_operate_pc    = btb_operate_pc_r;
+assign btb_operate_index = btb_operate_index_r;
+assign btb_pop_ras       = btb_pop_ras_r;
+assign btb_push_ras      = btb_push_ras_r;
+assign btb_add_entry     = btb_add_entry_r;
+assign btb_delete_entry  = btb_delete_entry_r;
+assign btb_pre_error     = btb_pre_error_r;
+assign btb_pre_right     = btb_pre_right_r;
+assign btb_target_error  = btb_target_error_r;
+assign btb_right_orien   = btb_right_orien_r;
+assign btb_right_target  = btb_right_target_r;
+
+// Use wire versions for internal same-cycle mispredict detection
+assign btb_pre_error_flush = (btb_add_entry_w || btb_delete_entry_w || btb_pre_error_w || btb_target_error_w) && ds_valid && ds_ready_go && !ds_excp;
 assign btb_pre_error_flush_target = br_taken ? br_target : ds_pc + 32'h4;
 
 //ibar dbar
