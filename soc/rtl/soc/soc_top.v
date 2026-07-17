@@ -34,7 +34,7 @@ module soc_top #(
     wire [ 3:0] rid;   wire [31:0] rdata;  wire [1:0] rresp; wire rlast, rvalid, rready;
     wire [ 3:0] awid;  wire [31:0] awaddr; wire [7:0] awlen; wire [2:0] awsize;
     wire [ 1:0] awburst, awlock; wire [3:0] awcache; wire [2:0] awprot; wire awvalid, awready;
-    wire [ 3:0] wid;   wire [31:0] wdata;  wire [3:0] wstrb; wire wlast, wvalid, wready;
+    wire [31:0] wdata;  wire [3:0] wstrb; wire wlast, wvalid, wready;
     wire [ 3:0] bid;   wire [1:0] bresp;   wire bvalid, bready;
 
     // slave 0 (BRAM/MMIO)
@@ -65,7 +65,7 @@ module soc_top #(
         .rid(rid),.rdata(rdata),.rresp(rresp),.rlast(rlast),.rvalid(rvalid),.rready(rready),
         .awid(awid),.awaddr(awaddr),.awlen(awlen),.awsize(awsize),.awburst(awburst),
         .awlock(awlock),.awcache(awcache),.awprot(awprot),.awvalid(awvalid),.awready(awready),
-        .wid(wid),.wdata(wdata),.wstrb(wstrb),.wlast(wlast),.wvalid(wvalid),.wready(wready),
+        .wdata(wdata),.wstrb(wstrb),.wlast(wlast),.wvalid(wvalid),.wready(wready),
         .bid(bid),.bresp(bresp),.bvalid(bvalid),.bready(bready),
         .break_point(1'b0),.infor_flag(1'b0),.reg_num(5'b0),
         .ws_valid(),.rf_rdata(),
