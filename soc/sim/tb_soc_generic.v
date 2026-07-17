@@ -248,4 +248,22 @@ module tb_soc_generic #(
     end
     $finish;
   end
+// Pipeline liveness: print key handshake signals every 100K cycles
+wire stall_fs_allowin = dut.u_core.if_stage.fs_allowin;
+wire stall_fs2ds     = dut.u_core.if_stage.fs_to_ds_valid;
+wire stall_ds_allowin = dut.u_core.id_stage.ds_allowin;
+wire stall_es_allowin = dut.u_core.id_stage.es_allowin;
+wire stall_ds2es      = dut.u_core.id_stage.ds_to_es_valid;
+reg  [31:0] stall_retire_cnt = 0;
+always @(posedge aclk) if (aresetn) begin
+  if (dut.u_core.wb_stage.rf_we) stall_retire_cnt <= stall_retire_cnt + 1;
+  if (cyc % 1000 == 0)
+    $display("[%0t] STALL cyc=%0d pc=%08x retire=%0d fs_alw=%b fs2ds=%b ds_alw=%b es_alw=%b ds2es=%b fs_v=%b fs_rgo=%b idok=%b buff=%b | IC st=%b dok=%b aok=%b",
+             $time, cyc, dut.u_core.if_stage.nextpc, stall_retire_cnt,
+             stall_fs_allowin, stall_fs2ds, stall_ds_allowin, stall_es_allowin, stall_ds2es,
+             dut.u_core.if_stage.fs_valid, dut.u_core.if_stage.fs_ready_go,
+             dut.u_core.if_stage.inst_data_ok, dut.u_core.if_stage.inst_buff_enable,
+             dut.u_core.icache.main_state, dut.u_core.icache.data_ok, dut.u_core.icache.addr_ok);
+end
+
 endmodule
